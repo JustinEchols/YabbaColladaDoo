@@ -66,17 +66,6 @@ struct xml_node
 	xml_node **Children;
 };
 
-internal xml_attribute *
-PushXMLAttribute()
-{
-	xml_attribute *Attribute = (xml_attribute *)calloc(1, sizeof(xml_attribute));
-	Attribute->Key = 0;
-	Attribute->Value = 0;
-
-	return(Attribute);
-}
-
-// TODO(Justin): Consolidate the attributes struct into the xml node struct?
 internal xml_node *
 PushXMLNode(xml_node *Parent)
 {
@@ -111,22 +100,6 @@ ChildNodeGet(xml_node *Node, s32 Index)
 	return(Result);
 }
 
-internal void
-NodePrint(xml_node *Node)
-{
-	printf("Tag:%s\n", Node->Tag);
-
-	// NOTE(Justin): AttributeCount is really an index currently
-	for(s32 Index = 0; Index < Node->AttributeCount; ++Index)
-	{
-		xml_attribute *Attr = Node->Attributes + Index;
-		printf("Key:%s Value:%s\n", Attr->Key, Attr->Value);
-
-	}
-	printf("InnerText:%s\n", Node->InnerText);
-
-}
-
 internal void *
 NodeAddChild(xml_node *Node, xml_node *Child)
 {
@@ -137,14 +110,12 @@ NodeAddChild(xml_node *Node, xml_node *Child)
 	}
 }
 
-static char *DepthStrings[7] = {"", "\t", "\t\t", "\t\t\t", "\t\t\t\t", "\t\t\t\t\t", "\t\t\t\t\t\t"};
+internal char *DepthStrings[7] = {"", "\t", "\t\t", "\t\t\t", "\t\t\t\t", "\t\t\t\t\t", "\t\t\t\t\t\t"};
 
 internal void
 NAryTreePrint(xml_node *Root, int *Depth)
 {
 	char *DepthString = DepthStrings[*Depth];
-	//printf("%sTag:%s\n", DepthString, Root->Tag);
-	//printf("%sInnerText:%s\n", DepthString, Root->InnerText);
 	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
 	{
 		xml_node *Node = Root->Children[Index];
@@ -309,6 +280,8 @@ int main(int Argc, char **Argv)
 					// NOTE(Justin): Child node
 					if(StringsAreSame(CurrentNode->Tag, "triangles"))
 					{
+						// TODO(Justin): Incorrect parsing of vertex indices.
+						// This is if statement is for debug code only.
 						int u = 0;
 					}
 
@@ -333,42 +306,12 @@ int main(int Argc, char **Argv)
 					{
 						CurrentNode->InnerText = strdup(Buffer);
 					}
-
 				}
-
-
-
-				// NOTE(Justin): If a tag exists assume that the tag has been
-				// processed.
-
-				// Note(Justin): Three cases
-				// 1) Inner text
-				// 2) New node
-				// 3) Closing tag
-
-				// NOTE(Justin): At the end of the original node or at the
-				// begining of a child node. This depends on wether or not
-				// the first character after '<' is a forward slash '/' or
-				// not. 
-
 			}
 		}
 
 		int Depth = 0;
 		NAryTreePrint(Root, &Depth);
-#if 0
-		NodePrint(Root);
-		for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
-		{
-			xml_node *Node = ChildNodeGet(Root, Index);
-			NodePrint(Node);
-			for(s32 ChildIndex = 0; ChildIndex < Node->ChildrenCount; ++ChildIndex)
-			{
-				xml_node *Child = Node->Children[ChildIndex];
-				NodePrint(Child);
-			}
-		}
-#endif
 	}
 
 	return(0);
