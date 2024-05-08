@@ -115,14 +115,13 @@ internal char *DepthStrings[7] = {"", "\t", "\t\t", "\t\t\t", "\t\t\t\t", "\t\t\
 internal void
 NAryTreePrint(xml_node *Root, int *Depth)
 {
-	char *DepthString = DepthStrings[*Depth];
 	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
 	{
 		xml_node *Node = Root->Children[Index];
 		if(Node)
 		{
 			(*Depth)++;
-			DepthString = DepthStrings[*Depth];
+			char *DepthString = DepthStrings[*Depth];
 			printf("%sTag:%s\n", DepthString, Node->Tag);
 			for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
 			{
@@ -146,7 +145,7 @@ StringsAreSame(char *S1, char *S2)
 
 int main(int Argc, char **Argv)
 {
-	FILE *FileHandle = fopen("testdae2.dae", "r");
+	FILE *FileHandle = fopen("testdae1.dae", "r");
 	if(FileHandle)
 	{
 		// NOTE(Justin): Get the size of the file
