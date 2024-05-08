@@ -109,7 +109,7 @@ internal xml_node *
 ChildNodeGet(xml_node *Node, s32 Index)
 {
 	xml_node *Result = 0;
-	if((Index > 0) && (Index < Node->ChildrenCount))
+	if((Index >= 0) && (Index < Node->ChildrenCount))
 	{
 		Result = Node->Children[Index];
 		Assert(Result);
@@ -144,9 +144,45 @@ NodeAddChild(xml_node *Node, xml_node *Child)
 	}
 }
 
+static char *DepthStrings[7] = {"", "\t", "\t\t", "\t\t\t", "\t\t\t\t", "\t\t\t\t\t", "\t\t\t\t\t\t"};
+
+internal void
+NAryTreePrint(xml_node *Root, int *Depth)
+{
+	char *DepthString = DepthStrings[*Depth];
+	//printf("%sTag:%s\n", DepthString, Root->Tag);
+	//printf("%sInnerText:%s\n", DepthString, Root->InnerText);
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		if(Node)
+		{
+			(*Depth)++;
+			DepthString = DepthStrings[*Depth];
+			printf("%sTag:%s\n", DepthString, Node->Tag);
+			for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
+			{
+				xml_attribute *Attribute = Node->Attributes + AttrIndex;
+
+				printf("%sKey:%s Value:%s\n", DepthString, Attribute->Key, Attribute->Value);
+			}
+			printf("%sInnerText:%s\n", DepthString, Node->InnerText);
+			NAryTreePrint(Node, Depth);
+		}
+		(*Depth)--;
+	}
+}
+
+internal b32
+StringsAreSame(char *S1, char *S2)
+{
+	b32 Result = (strcmp(S1, S2) == 0);
+	return(Result);
+}
+
 int main(int Argc, char **Argv)
 {
-	FILE *FileHandle = fopen("test2.xml", "r");
+	FILE *FileHandle = fopen("testdae2.dae", "r");
 	if(FileHandle)
 	{
 		// NOTE(Justin): Get the size of the file
@@ -162,12 +198,13 @@ int main(int Argc, char **Argv)
 		char TagEnd = '>';
 		char ForwardSlash = '/';
 
-		char Buffer[256];
+		char Buffer[4096];
 		s32 InnerTextIndex = 0;
 		s32 Index = 0;
 
 		xml_node *Root = PushXMLNode(0);
 		xml_node *CurrentNode = Root;
+
 
 		while(Content[Index] != '\0')
 		{
@@ -233,6 +270,12 @@ int main(int Argc, char **Argv)
 						{
 							Index++;
 						}
+
+						if(Content[Index] == '/')
+						{
+							Index++;
+							CurrentNode = CurrentNode->Parent;
+						}
 					}
 				}
 
@@ -248,8 +291,10 @@ int main(int Argc, char **Argv)
 			}
 			else
 			{
-				if(Content[Index] == '<' && Content[Index + 1] == '/')
+				if((Content[Index] == '<') && (Content[Index + 1] == '/'))
 				{
+					// NOTE(Justin): Closing tag and end of the current node.
+					// Advance the index to one past '>'.
 					Index += 2;
 					while(Content[Index] != '>')
 					{
@@ -269,23 +314,33 @@ int main(int Argc, char **Argv)
 				else if(Content[Index] == '<')
 				{
 					// NOTE(Justin): Child node
+					if(StringsAreSame(CurrentNode->Tag, "triangles"))
+					{
+						int u = 0;
+					}
 
-					xml_node *LastChild = CurrentNode->Children[CurrentNode->ChildrenCount++];
-					xml_node *NewNode = PushXMLNode(CurrentNode);
-					LastChild = NewNode;
-					CurrentNode = NewNode;
+					xml_node *LastChild = PushXMLNode(CurrentNode);
+					CurrentNode->Children[CurrentNode->ChildrenCount] = LastChild;
+					CurrentNode->ChildrenCount++;
+					CurrentNode = LastChild;
 				}
 				else
 				{
-					// TODO(Justin): Inspect this case
+					// TODO(Justin): At the end of a child node and another
+					// child node exists.
 					while(Content[Index] != TagStart)
 					{
 						Buffer[InnerTextIndex++] = Content[Index++];
 					}
-
 					Buffer[InnerTextIndex] = '\0';
-					CurrentNode->InnerText = strdup(Buffer);
 					InnerTextIndex = 0;
+
+					// NOTE(Justin): I do not think this is required....
+					if(!CurrentNode->InnerText)
+					{
+						CurrentNode->InnerText = strdup(Buffer);
+					}
+
 				}
 
 
@@ -306,8 +361,21 @@ int main(int Argc, char **Argv)
 			}
 		}
 
+		int Depth = 0;
+		NAryTreePrint(Root, &Depth);
+#if 0
 		NodePrint(Root);
-		NodePrint(ChildNodeGet(Root, 0));
+		for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+		{
+			xml_node *Node = ChildNodeGet(Root, Index);
+			NodePrint(Node);
+			for(s32 ChildIndex = 0; ChildIndex < Node->ChildrenCount; ++ChildIndex)
+			{
+				xml_node *Child = Node->Children[ChildIndex];
+				NodePrint(Child);
+			}
+		}
+#endif
 	}
 
 	return(0);
