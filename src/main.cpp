@@ -50,13 +50,6 @@ struct xml_attribute
 	char *Value;
 };
 
-struct xml_attribute_list
-{
-	s32 AttributeCountMax;
-	s32 AttributeCount;
-	xml_attribute *Attributes;
-};
-
 struct xml_node
 {
 	char *Tag;
