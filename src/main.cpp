@@ -9,6 +9,7 @@
 	
 	<tagname></tagname>
 
+	// TODO(Justin): Length based strings
 */
 
 #include <stdio.h>
@@ -36,7 +37,15 @@ typedef uint64_t u64;
 
 typedef s32 b32;
 
+typedef float f32;
+
 typedef size_t memory_index;
+
+struct string
+{
+	u8 *Data;
+	u64 Size;
+};
 
 struct xml_doc
 {
@@ -52,8 +61,8 @@ struct xml_attribute
 
 struct xml_node
 {
-	char *Tag;
-	char *InnerText;
+	string Tag;
+	string InnerText;
 
 	s32 AttributeCountMax;
 	s32 AttributeCount;
@@ -71,14 +80,14 @@ PushXMLNode(xml_node *Parent)
 {
 	xml_node *Node = (xml_node *)calloc(1, sizeof(xml_node));
 
-	Node->Tag = 0;
-	Node->InnerText = 0;
-	Node->AttributeCount = 0;
+	//Node->Tag = 0;
+	//Node->InnerText = 0;
+	//Node->AttributeCount = 0;
 	Node->AttributeCountMax = XML_ATTRIBUTE_MAX_COUNT;
 	Node->Attributes = (xml_attribute *)calloc(Node->AttributeCountMax, sizeof(xml_attribute));
 
 	Node->ChildrenMaxCount = XML_NODE_CHILDREN_MAX_COUNT;
-	Node->ChildrenCount = 0;
+	//Node->ChildrenCount = 0;
 
 	Node->Children = (xml_node **)calloc(Node->ChildrenMaxCount, sizeof(xml_node *));
 
@@ -87,33 +96,10 @@ PushXMLNode(xml_node *Parent)
 	return(Node);
 }
 
-internal xml_node *
-ChildNodeGet(xml_node *Node, s32 Index)
-{
-	xml_node *Result = 0;
-	if((Index >= 0) && (Index < Node->ChildrenCount))
-	{
-		Result = Node->Children[Index];
-		Assert(Result);
-	}
-
-	return(Result);
-}
-
-internal void *
-NodeAddChild(xml_node *Node, xml_node *Child)
-{
-	if(Node->ChildrenCount < Node->ChildrenMaxCount)
-	{
-		xml_node *Last = Node->Children[Node->ChildrenCount++];
-		Last = Child;
-	}
-}
-
 internal char *DepthStrings[7] = {"", "\t", "\t\t", "\t\t\t", "\t\t\t\t", "\t\t\t\t\t", "\t\t\t\t\t\t"};
 
 internal void
-NAryTreePrint(xml_node *Root, int *Depth)
+NaryTreePrint(xml_node *Root, int *Depth)
 {
 	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
 	{
@@ -130,7 +116,7 @@ NAryTreePrint(xml_node *Root, int *Depth)
 				printf("%sKey:%s Value:%s\n", DepthString, Attribute->Key, Attribute->Value);
 			}
 			printf("%sInnerText:%s\n", DepthString, Node->InnerText);
-			NAryTreePrint(Node, Depth);
+			NaryTreePrint(Node, Depth);
 		}
 		(*Depth)--;
 	}
@@ -143,9 +129,162 @@ StringsAreSame(char *S1, char *S2)
 	return(Result);
 }
 
+struct mesh
+{
+	f32 *Positions;
+	f32 *Normals;
+	f32 *UV;
+	u32 *Indices;
+
+	u32 PositionsCount;
+	u32 NormalsCount;
+	u32 UVsCount;
+	u32 IndicesCount;
+};
+
+internal b32
+SubStringExists(char *HayStack, char *Needle)
+{
+	b32 Result = false;
+	char *S = strstr(HayStack, Needle);
+	if(S)
+	{
+		Result = true;
+	}
+	return(Result);
+}
+
+internal b32
+StringEndsWith(string S, char C)
+{
+	u8 *Test = S.Data + (S.Size - 1);
+	b32 Result = (*Test == (u8 )C);
+
+	return(Result);
+}
+
+#if 0
+internal void
+ParseFloatArray(f32 *Dest, u32 DestCount, char *Data)
+{
+	char *Scan = Data;
+	for(u32 Index = 0; Index < DestCount; ++Index)
+	{
+		Dest[Index] = (f32)atof(Scan);
+		while(*Scan != ' ' && *Scan != '\0')
+		{
+			Scan++;
+		}
+		Scan++;
+
+	}
+}
+
+internal void
+ParseIndexArray(u32 *Dest, u32 DestCount, char *Data)
+{
+	char *Scan = Data;
+	for(u32 Index = 0; Index < DestCount; ++Index)
+	{
+		Dest[Index] = (u32)atoi(Scan);
+		while(*Scan != ' ' && *Scan != '\0')
+		{
+			Scan++;
+		}
+		Scan++;
+	}
+}
+
+internal void 
+MeshInit(xml_node *Root, mesh *Mesh)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		if(Node)
+		{
+			if(StringsAreSame(Node->Tag, "float_array"))
+			{
+				if(SubStringExists(Node->Attributes->Value, "mesh-positions"))
+				{
+					for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
+					{
+						xml_attribute *Attribute = Node->Attributes + AttrIndex;
+						if(StringsAreSame(Attribute->Key, "count"))
+						{
+							Mesh->PositionsCount = atoi(Attribute->Value);
+							Mesh->Positions = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+
+							ParseFloatArray(Mesh->Positions, Mesh->PositionsCount, Node->InnerText);
+						}
+					}
+				}
+				else if(SubStringExists(Node->Attributes->Value, "mesh-normals"))
+				{
+					for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
+					{
+						xml_attribute *Attribute = Node->Attributes + AttrIndex;
+						if(StringsAreSame(Attribute->Key, "count"))
+						{
+							Mesh->NormalsCount = atoi(Attribute->Value);
+							Mesh->Normals = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+
+							ParseFloatArray(Mesh->Normals, Mesh->NormalsCount, Node->InnerText);
+						}
+					}
+				}
+				else if(SubStringExists(Node->Attributes->Value, "mesh-map-0"))
+				{
+					for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
+					{
+						xml_attribute *Attribute = Node->Attributes + AttrIndex;
+						if(StringsAreSame(Attribute->Key, "count"))
+						{
+							Mesh->UVsCount = atoi(Attribute->Value);
+							Mesh->UV = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+
+							ParseFloatArray(Mesh->UV, Mesh->UVsCount, Node->InnerText);
+						}
+					}
+				}
+			}
+
+			if(StringsAreSame(Node->Tag, "triangles"))
+			{
+				for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
+				{
+					xml_attribute *Attribute = Node->Attributes + AttrIndex;
+					if(StringsAreSame(Attribute->Key, "count"))
+					{
+						Mesh->IndicesCount = 3 * 3 * atoi(Attribute->Value);
+						Mesh->Indices = (u32 *)calloc(Mesh->IndicesCount, sizeof(u32));
+					}
+				}
+
+			}
+
+			if(StringsAreSame(Node->Tag, "p"))
+			{
+				Assert(Mesh->IndicesCount > 0);
+				Assert(Mesh->Indices);
+
+				ParseIndexArray(Mesh->Indices, Mesh->IndicesCount, Node->InnerText);
+			}
+
+
+
+			if(*Node->Children)
+			{
+				MeshInit(Node, Mesh);
+			}
+		}
+	}
+}
+#endif
+
 int main(int Argc, char **Argv)
 {
-	FILE *FileHandle = fopen("testdae1.dae", "r");
+	FILE *FileHandle = fopen("untitled.dae", "r");
 	if(FileHandle)
 	{
 		// NOTE(Justin): Get the size of the file
@@ -168,17 +307,33 @@ int main(int Argc, char **Argv)
 		xml_node *Root = PushXMLNode(0);
 		xml_node *CurrentNode = Root;
 
+		while(!SubStringExists(Buffer, "COLLADA"))
+		{	
+			Buffer[InnerTextIndex++] = Content[Index++];
+			Buffer[InnerTextIndex] = '\0';
+		}
+		InnerTextIndex = 0;
+		Index -= ((s32)strlen("COLLADA") + 1);
 
 		while(Content[Index] != '\0')
 		{
-			if(!CurrentNode->Tag)
+			if(!CurrentNode->Tag.Data)
 			{
 				Index++;
 				while(Content[Index] != TagEnd)
 				{
 					Buffer[InnerTextIndex++] = Content[Index++];
 
-					if(((Content[Index] == ' ') || (Content[Index + 1] == TagEnd)) && (!CurrentNode->Tag))
+
+					if((Content[Index] == TagEnd))
+					{
+						Buffer[InnerTextIndex] = '\0';
+						CurrentNode->Tag.Data = (u8 *)strdup(Buffer);
+						CurrentNode->Tag.Size = InnerTextIndex;
+						InnerTextIndex = 0;
+					}
+
+					if(((Content[Index] == ' ') || (Content[Index + 1] == TagEnd)) && (!CurrentNode->Tag.Data))
 					{
 						// NOTE(Justin): Two types of tags. Tag with key/values
 						// and tags without key/values. So, need to handle both.
@@ -188,7 +343,8 @@ int main(int Argc, char **Argv)
 						}
 
 						Buffer[InnerTextIndex] = '\0';
-						CurrentNode->Tag = strdup(Buffer);
+						CurrentNode->Tag.Data = (u8 *)strdup(Buffer);
+						CurrentNode->Tag.Size = InnerTextIndex;
 						InnerTextIndex = 0;
 						Index++;
 					}
@@ -249,11 +405,16 @@ int main(int Argc, char **Argv)
 					Buffer[InnerTextIndex++] = Content[Index++];
 				}
 				Buffer[InnerTextIndex] = '\0';
-				CurrentNode->InnerText = strdup(Buffer);
+				CurrentNode->InnerText.Data = (u8 *)strdup(Buffer);
+				CurrentNode->InnerText.Size = InnerTextIndex;
 				InnerTextIndex = 0;
 			}
 			else
 			{
+				if(StringEndsWith(CurrentNode->Tag, '/'))
+				{
+					CurrentNode = CurrentNode->Parent;
+				}
 				if((Content[Index] == '<') && (Content[Index + 1] == '/'))
 				{
 					// NOTE(Justin): Closing tag and end of the current node.
@@ -277,13 +438,6 @@ int main(int Argc, char **Argv)
 				else if(Content[Index] == '<')
 				{
 					// NOTE(Justin): Child node
-					if(StringsAreSame(CurrentNode->Tag, "triangles"))
-					{
-						// TODO(Justin): Incorrect parsing of vertex indices.
-						// This is if statement is for debug code only.
-						int u = 0;
-					}
-
 					xml_node *LastChild = PushXMLNode(CurrentNode);
 					CurrentNode->Children[CurrentNode->ChildrenCount] = LastChild;
 					CurrentNode->ChildrenCount++;
@@ -301,16 +455,20 @@ int main(int Argc, char **Argv)
 					InnerTextIndex = 0;
 
 					// NOTE(Justin): I do not think this is required....
-					if(!CurrentNode->InnerText)
+					if(!CurrentNode->InnerText.Data)
 					{
-						CurrentNode->InnerText = strdup(Buffer);
+						CurrentNode->InnerText.Data = (u8 *)strdup(Buffer);
+						CurrentNode->InnerText.Size = InnerTextIndex;
 					}
 				}
 			}
 		}
 
-		int Depth = 0;
-		NAryTreePrint(Root, &Depth);
+		mesh *Cube = (mesh *)calloc(1, sizeof(mesh));
+		if(Cube)
+		{
+		//	MeshInit(Root, Cube);
+		}
 	}
 
 	return(0);
