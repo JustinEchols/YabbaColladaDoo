@@ -1,7 +1,5 @@
-src/main.exe
-src/main.ilk
-src/main.obj
-src/main.pdb
+build
 src/tags
+dependencies
 
 
