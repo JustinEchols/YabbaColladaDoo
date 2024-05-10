@@ -95,7 +95,18 @@ StringsAreSame(string S1, char *S2)
 	return(Result);
 }
 
+struct mesh
+{
+	f32 *Positions;
+	f32 *Normals;
+	f32 *UV;
+	u32 *Indices;
 
+	u32 PositionsCount;
+	u32 NormalsCount;
+	u32 UVCount;
+	u32 IndicesCount;
+};
 
 internal b32
 SubStringExists(char *HayStack, char *Needle)
@@ -132,6 +143,7 @@ StringEndsWith(string S, char C)
 	return(Result);
 }
 
+#if 1
 internal void
 ParseFloatArray(f32 *Dest, u32 DestCount, string Data)
 {
@@ -186,8 +198,6 @@ S32FromASCII(u8 *S)
 }
 
 
-// TODO(Justin): Process the data and completely initialize the mesh here.
-#if 0
 internal void 
 MeshInit(xml_node *Root, mesh *Mesh)
 {
@@ -582,19 +592,6 @@ MeshInit(loaded_dae DaeFile)
 
 	return(Mesh);
 }
-
-struct mesh
-{
-	f32 *Positions;
-	f32 *Normals;
-	f32 *UV;
-	u32 *Indices;
-
-	u32 PositionsCount;
-	u32 NormalsCount;
-	u32 UVCount;
-	u32 IndicesCount;
-};
 
 int main(int Argc, char **Argv)
 {
