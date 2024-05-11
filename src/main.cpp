@@ -10,6 +10,10 @@
  [] Init mesh using recursion so only have to traverse tree once? (bad idea??)
  [] Skeletal animation transforms
  [] Remove crt functions
+ [] Write collada file
+ [] Do we need dynamix buffer sizes?
+ [] For models we know we only need to read do we parse the entire file?
+
 
 */
 
@@ -24,6 +28,8 @@
 #define internal static
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #define ArrayCount(A) sizeof(A) / sizeof((A)[0])
+#define Kilobyte(Count) (1024 * Count)
+#define Megabyte(Count) (1024 * Kilobyte(Count))
 
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
 #define COLLADA_NODE_CHILDREN_MAX_COUNT 30
@@ -43,6 +49,35 @@ typedef s32 b32;
 typedef float f32;
 
 typedef size_t memory_index;
+
+struct memory_arena
+{
+	u8 *Base;
+	memory_index Size;
+	memory_index Used;
+};
+
+internal void
+ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
+{
+	Arena->Base = Base;
+	Arena->Size = Size;
+	Arena->Used = 0;
+}
+
+
+#define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
+#define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
+internal void *
+PushSize_(memory_arena *Arena, memory_index Size)
+{
+	Assert((Arena->Used + Size) <= Arena->Size);
+
+	void *Result = Arena->Base + Arena->Used;
+	Arena->Used += Size;
+
+	return(Result);
+}
 
 struct string
 {
@@ -80,14 +115,16 @@ struct loaded_dae
 
 
 internal xml_node *
-PushXMLNode(xml_node *Parent)
+PushXMLNode(memory_arena *Arena, xml_node *Parent)
 {
-	xml_node *Node = (xml_node *)calloc(1, sizeof(xml_node));
+	xml_node *Node = PushStruct(Arena, xml_node);
 
 	Node->AttributeCountMax = COLLADA_ATTRIBUTE_MAX_COUNT;
-	Node->Attributes = (xml_attribute *)calloc(Node->AttributeCountMax, sizeof(xml_attribute));
+
+	Node->Attributes = PushArray(Arena, Node->AttributeCountMax, xml_attribute);//(xml_attribute *)calloc(Node->AttributeCountMax, sizeof(xml_attribute));
 	Node->ChildrenMaxCount = COLLADA_NODE_CHILDREN_MAX_COUNT;
-	Node->Children = (xml_node **)calloc(Node->ChildrenMaxCount, sizeof(xml_node *));
+
+	Node->Children = PushArray(Arena, Node->ChildrenMaxCount, xml_node *);
 	Node->Parent = Parent;
 
 	return(Node);
@@ -155,7 +192,6 @@ StringEndsWith(string S, char C)
 	return(Result);
 }
 
-#if 1
 internal void
 ParseF32Array(f32 *Dest, u32 DestCount, string Data)
 {
@@ -209,7 +245,26 @@ S32FromASCII(u8 *S)
 	return(Result);
 }
 
+internal xml_attribute
+NodeAttributeGet(xml_node *Node, char *AttrName)
+{
+	xml_attribute Result = {};
+	for(s32 Index = 0; Index < Node->AttributeCount; ++Index)
+	{
+		xml_attribute *Attr = Node->Attributes + Index;
+		if(StringsAreSame(Attr->Key, AttrName)) 
+		{
+			Result = *Attr;
+		}
+	}
 
+	return(Result);
+}
+
+
+// NOTE(Justin): Something very bad is happening when parsing using this routine
+
+#if 0
 internal void 
 MeshInit(xml_node *Root, mesh *Mesh)
 {
@@ -218,74 +273,47 @@ MeshInit(xml_node *Root, mesh *Mesh)
 		xml_node *Node = Root->Children[Index];
 		if(Node)
 		{
-			if(StringsAreSame((char *)Node->Tag.Data, "float_array"))
+			if(StringsAreSame(Node->Tag, "float_array"))
 			{
-				if(SubStringExists((char *)Node->Attributes->Value.Data, "mesh-positions"))
+				if(SubStringExists(Node->Attributes->Value, "mesh-positions-array"))
 				{
-					for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
-					{
-						xml_attribute *Attribute = Node->Attributes + AttrIndex;
-						if(StringsAreSame((char *)Attribute->Key.Data, "count"))
-						{
-							Mesh->PositionsCount = S32FromASCII(Attribute->Value.Data);
-							Mesh->Positions = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+					xml_attribute Attr = NodeAttributeGet(Node, "count");
 
-							ParseF32Array(Mesh->Positions, Mesh->PositionsCount, Node->InnerText);
-						}
-					}
+					Mesh->PositionsCount = S32FromASCII(Attr.Value.Data);
+					Mesh->Positions = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+					ParseF32Array(Mesh->Positions, Mesh->PositionsCount, Node->InnerText);
 				}
-				else if(SubStringExists((char *)Node->Attributes->Value.Data, "mesh-normals"))
+				else if(SubStringExists(Node->Attributes->Value, "mesh-normals-array"))
 				{
-					for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
-					{
-						xml_attribute *Attribute = Node->Attributes + AttrIndex;
-						if(StringsAreSame((char *)Attribute->Key.Data, "count"))
-						{
-							Mesh->NormalsCount = S32FromASCII(Attribute->Value.Data);
-							Mesh->Normals = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+					xml_attribute Attr = NodeAttributeGet(Node, "count");
 
-							ParseF32Array(Mesh->Normals, Mesh->NormalsCount, Node->InnerText);
-						}
-					}
+					Mesh->NormalsCount = S32FromASCII(Attr.Value.Data);
+					Mesh->Normals = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+					ParseF32Array(Mesh->Normals, Mesh->NormalsCount, Node->InnerText);
 				}
-				else if(SubStringExists((char *)Node->Attributes->Value.Data, "mesh-map-0"))
+				else if(SubStringExists(Node->Attributes->Value, "mesh-map-0-array"))
 				{
-					for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
-					{
-						xml_attribute *Attribute = Node->Attributes + AttrIndex;
-						if(StringsAreSame((char *)Attribute->Key.Data, "count"))
-						{
-							Mesh->UVCount = S32FromASCII(Attribute->Value.Data);
-							Mesh->UV = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
+					xml_attribute Attr = NodeAttributeGet(Node, "count");
+					Mesh->UVCount = S32FromASCII(Attr.Value.Data);
+					Mesh->UV = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
 
-							ParseF32Array(Mesh->UV, Mesh->UVCount, Node->InnerText);
-						}
-					}
+					ParseF32Array(Mesh->UV, Mesh->UVCount, Node->InnerText);
 				}
 			}
 
-			if(StringsAreSame((char *)Node->Tag.Data, "triangles"))
+			if(StringsAreSame(Node->Tag, "triangles"))
 			{
-				for(s32 AttrIndex = 0; AttrIndex < Node->AttributeCount; ++AttrIndex)
-				{
-					xml_attribute *Attribute = Node->Attributes + AttrIndex;
-					if(StringsAreSame((char *)Attribute->Key.Data, "count"))
-					{
-						Mesh->IndicesCount = 3 * 3 * S32FromASCII(Attribute->Value.Data);
-						Mesh->Indices = (u32 *)calloc(Mesh->IndicesCount, sizeof(u32));
-					}
-				}
-
+				xml_attribute Attr = NodeAttributeGet(Node, "count");
+				Mesh->IndicesCount = 3 * 3 * S32FromASCII(Attr.Value.Data);
+				Mesh->Indices = (u32 *)calloc(Mesh->IndicesCount, sizeof(u32));
 			}
 
-			if(StringsAreSame((char *)Node->Tag.Data, "p"))
+			if(StringsAreSame(Node->Tag, "p"))
 			{
 				Assert(Mesh->IndicesCount > 0);
 				Assert(Mesh->Indices);
-
 				ParseS32Array(Mesh->Indices, Mesh->IndicesCount, Node->InnerText);
 			}
-
 
 			if(*Node->Children)
 			{
@@ -295,6 +323,8 @@ MeshInit(xml_node *Root, mesh *Mesh)
 	}
 }
 #endif
+
+
 
 internal void
 NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
@@ -307,7 +337,7 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 			xml_node *Node = Root->Children[Index];
 			if(Node)
 			{
-				if(StringsAreSame((char *)Node->Tag.Data, TagName))
+				if(StringsAreSame(Node->Tag, TagName))
 				{
 
 					// NOTE(Justin): Tags either have/do not have an ID.
@@ -343,24 +373,10 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 	}
 }
 
-internal xml_attribute
-NodeAttributeGet(xml_node *Node, char *AttrName)
-{
-	xml_attribute Result = {};
-	for(s32 Index = 0; Index < Node->AttributeCount; ++Index)
-	{
-		xml_attribute *Attr = Node->Attributes + Index;
-		if(StringsAreSame((char *)Attr->Key.Data, AttrName)) 
-		{
-			Result = *Attr;
-		}
-	}
 
-	return(Result);
-}
 
 internal loaded_dae
-ColladaFileLoad(char *FileName)
+ColladaFileLoad(memory_arena *Arena, char *FileName)
 {
 	loaded_dae Result = {};
 
@@ -372,6 +388,7 @@ ColladaFileLoad(char *FileName)
 		s32 Size = ftell(FileHandle);
 		fseek(FileHandle, 0, SEEK_SET);
 
+
 		u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
 		fread(Content, 1, Size, FileHandle);
 		Content[Size] = '\0';
@@ -380,11 +397,11 @@ ColladaFileLoad(char *FileName)
 		char TagEnd = '>';
 		//char ForwardSlash = '/';
 
-		char Buffer[4096];
+		char *Buffer = (char *)calloc(Size/4, sizeof(char));
 		s32 InnerTextIndex = 0;
 		s32 Index = 0;
 
-		Result.Root = PushXMLNode(0);
+		Result.Root = PushXMLNode(Arena, 0);
 		xml_node *CurrentNode = Result.Root;
 
 		while(!SubStringExists(Buffer, "COLLADA"))
@@ -478,6 +495,7 @@ ColladaFileLoad(char *FileName)
 					}
 				}
 
+				// NOTE(Justin): Done processing tag. Buffer & copy inner text.
 				Index++;
 				InnerTextIndex = 0;
 				while(Content[Index] != TagStart)
@@ -519,11 +537,11 @@ ColladaFileLoad(char *FileName)
 				else if(Content[Index] == '<')
 				{
 					// NOTE(Justin): Child node exists
-					xml_node *LastChild = PushXMLNode(CurrentNode);
+					xml_node *LastChild = PushXMLNode(Arena, CurrentNode);
 					CurrentNode->Children[CurrentNode->ChildrenCount] = LastChild;
 					CurrentNode->ChildrenCount++;
 
-					// TODO(Justin): On-demand allocation of children nodes.
+					// TODO(Justin): On-demand allocation of children nodes (currently capped).
 					Assert(CurrentNode->ChildrenCount < COLLADA_NODE_CHILDREN_MAX_COUNT);
 					CurrentNode = LastChild;
 				}
@@ -539,7 +557,10 @@ ColladaFileLoad(char *FileName)
 				}
 			}
 		}
+
+		fclose(FileHandle);
 	}
+
 
 	return(Result);
 }
@@ -569,6 +590,7 @@ OpenGLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsi
 	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
+#if 1
 internal mesh
 MeshInit(loaded_dae DaeFile)
 {
@@ -594,9 +616,6 @@ MeshInit(loaded_dae DaeFile)
 	NodeGet(&Geometry, &NodeUV, "float_array", "mesh-map-0-array");
 	NodeGet(&Geometry, &NodeIndex, "p");
 
-	//mesh *Cube = (mesh *)calloc(1, sizeof(mesh));
-	//Assert(Cube);
-
 	xml_attribute AttrP = NodeAttributeGet(&NodePos, "count");
 	Mesh.PositionsCount = S32FromASCII(AttrP.Value.Data);
 
@@ -621,13 +640,21 @@ MeshInit(loaded_dae DaeFile)
 
 	return(Mesh);
 }
+#endif
 
 int main(int Argc, char **Argv)
 {
+
+	void *Memory = calloc(Megabyte(1), sizeof(u8));
+
+	memory_arena Arena_;
+	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(1));
+	memory_arena *Arena = &Arena_;
+
 	glfwSetErrorCallback(GLFWErrorCallback);
 	if(glfwInit())
 	{
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		glfwWindowHint(GLFW_SAMPLES, 4);
@@ -661,13 +688,11 @@ int main(int Argc, char **Argv)
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-				loaded_dae CubeDae = ColladaFileLoad("untitled.dae");
+				loaded_dae CubeDae = ColladaFileLoad(Arena, "untitled.dae");
 				mesh Cube = MeshInit(CubeDae);
 
-
-#if 0
 				char *VertexShaderSrc = R"(
-				#version 430 core
+				#version 330 core
 				layout (location = 0) in vec3 P;
 				void main()
 				{
@@ -675,7 +700,7 @@ int main(int Argc, char **Argv)
 				})";
 
 				char *FragmentShaderSrc = R"(
-				#version 430 core
+				#version 330 core
 				out vec4 FragColor;
 				void main()
 				{
@@ -691,8 +716,8 @@ int main(int Argc, char **Argv)
 				glShaderSource(VertexShaderHandle, 1, &VertexShaderSrc, 0);
 				glShaderSource(FragmentShaderHandle, 1, &FragmentShaderSrc, 0);
 
-				s32 VertexShaderIsValid;
-				s32 FragmentShaderIsValid;
+				b32 VertexShaderIsValid = false;
+				b32 FragmentShaderIsValid = false;
 
 				char Buffer[512];
 
@@ -720,7 +745,7 @@ int main(int Argc, char **Argv)
 				glAttachShader(ShaderProgram, FragmentShaderHandle);
 				glLinkProgram(ShaderProgram);
 
-				b32 ProgramIsValid;
+				b32 ProgramIsValid = false;
 				glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &ProgramIsValid);
 				if(!ProgramIsValid)
 				{
@@ -764,8 +789,6 @@ int main(int Argc, char **Argv)
 					glfwSwapBuffers(Window.Handle);
 					glfwPollEvents();
 				}
-
-#endif
 			}
 		}
 	}
