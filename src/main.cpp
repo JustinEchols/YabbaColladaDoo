@@ -1,4 +1,18 @@
 
+/*
+
+ TODO(Justin):
+ [] Change children array from fixed size to allocate on demand
+ [] Clean up logic
+ [] Clean up parsing
+ [] Handle more complicated meshes
+ [] Handle meshes with materials
+ [] Init mesh using recursion so only have to traverse tree once? (bad idea??)
+ [] Skeletal animation transforms
+
+
+*/
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -11,9 +25,8 @@
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #define ArrayCount(A) sizeof(A) / sizeof((A)[0])
 
-// TODO(Justin): Is this large enough?
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
-#define COLLADA_NODE_CHILDREN_MAX_COUNT 10
+#define COLLADA_NODE_CHILDREN_MAX_COUNT 30
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -36,7 +49,6 @@ struct string
 	u8 *Data;
 	u64 Size;
 };
-
 
 struct xml_attribute
 {
@@ -357,7 +369,7 @@ ColladaFileLoad(char *FileName)
 
 		char TagStart = '<';
 		char TagEnd = '>';
-		char ForwardSlash = '/';
+		//char ForwardSlash = '/';
 
 		char Buffer[4096];
 		s32 InnerTextIndex = 0;
@@ -382,7 +394,6 @@ ColladaFileLoad(char *FileName)
 				while(Content[Index] != TagEnd)
 				{
 					Buffer[InnerTextIndex++] = Content[Index++];
-
 
 					if((Content[Index] == TagEnd))
 					{
@@ -410,6 +421,7 @@ ColladaFileLoad(char *FileName)
 
 					if((Content[Index] == '='))
 					{
+						// NOTE(Justin): Buffered key so copy to current attribute
 						xml_attribute *Attribute = CurrentNode->Attributes + CurrentNode->AttributeCount;
 						Buffer[InnerTextIndex] = '\0';
 						Attribute->Key.Data = (u8 *)strdup(Buffer);
@@ -420,6 +432,8 @@ ColladaFileLoad(char *FileName)
 
 					if((Content[Index] == '"'))
 					{
+						// NOTE(Jusitn): At start of value, buffer & copy to current attribute
+						// and increment attribute count
 						Index++;
 						while(Content[Index] != '"')
 						{
@@ -434,25 +448,21 @@ ColladaFileLoad(char *FileName)
 						CurrentNode->AttributeCount++;
 						Assert(CurrentNode->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
 
-						// NOTE(Jusitn): One of two situations can happen
-						// after processsing a value either we see a space
-						// ' ' after the quote or a bracket '>'. If it is a
-						// space eat it in order to start buffering the next
-						// key. If it is a bracket advance by 1 which will
-						// set the current character to '>' which results in
-						// the loop terminating.
 						InnerTextIndex = 0;
 						if(Content[Index + 1] == ' ')
 						{
+							// NOTE(Justin): Advance index to start buffering next key
 							Index += 2;
 						}
 						else
 						{
+							// NOTE(Justin): Advance index, next char is either '>' or '/'
 							Index++;
 						}
 
 						if(Content[Index] == '/')
 						{
+							// NOTE(Justin): Single tag node ("empty node") with no closing tag
 							Index++;
 							CurrentNode = CurrentNode->Parent;
 						}
@@ -472,11 +482,11 @@ ColladaFileLoad(char *FileName)
 			}
 			else
 			{
-
 				if(StringEndsWith(CurrentNode->Tag, '/'))
 				{
 					CurrentNode = CurrentNode->Parent;
 				}
+
 				if((Content[Index] == '<') && (Content[Index + 1] == '/'))
 				{
 					// NOTE(Justin): Closing tag and end of the current node. Advance the index to one past '>'.
@@ -499,10 +509,13 @@ ColladaFileLoad(char *FileName)
 
 				else if(Content[Index] == '<')
 				{
-					// NOTE(Justin): Child node
+					// NOTE(Justin): Child node exists
 					xml_node *LastChild = PushXMLNode(CurrentNode);
 					CurrentNode->Children[CurrentNode->ChildrenCount] = LastChild;
 					CurrentNode->ChildrenCount++;
+
+					// TODO(Justin): On-demand allocation of children nodes.
+					Assert(CurrentNode->ChildrenCount < COLLADA_NODE_CHILDREN_MAX_COUNT);
 					CurrentNode = LastChild;
 				}
 				else
@@ -538,6 +551,13 @@ internal void
 GLFWFrameBufferResizeCallBack(GLFWwindow *Window, s32 Width, s32 Height)
 {
 	glViewport(0, 0, Width, Height);
+}
+
+internal void GLAPIENTRY
+OpenGLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length,
+		const GLchar *Message, const void *UserParam)
+{
+	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
 internal mesh
@@ -600,7 +620,6 @@ int main(int Argc, char **Argv)
 	{
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		glfwWindowHint(GLFW_SAMPLES, 4);
 		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
@@ -624,6 +643,9 @@ int main(int Argc, char **Argv)
 				printf("Renderer = %s\n", RendererName);
 				printf("Renderer version = %s\n", RendererVersion);
 
+				glEnable(GL_DEBUG_OUTPUT);
+				glDebugMessageCallback(OpenGLDebugCallback, 0);
+
 				glEnable(GL_DEPTH_TEST);
 				glDepthFunc(GL_LESS);
 
@@ -633,9 +655,108 @@ int main(int Argc, char **Argv)
 				loaded_dae CubeDae = ColladaFileLoad("untitled.dae");
 				mesh Cube = MeshInit(CubeDae);
 
+
+#if 0
+				char *VertexShaderSrc = R"(
+				#version 430 core
+				layout (location = 0) in vec3 P;
+				void main()
+				{
+					gl_Position = vec4(P.x, P.y, P.z, 1.0f);
+				})";
+
+				char *FragmentShaderSrc = R"(
+				#version 430 core
+				out vec4 FragColor;
+				void main()
+				{
+					FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+				})";
+
+				u32 VertexShaderHandle;
+				u32 FragmentShaderHandle;
+
+				VertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
+				FragmentShaderHandle = glCreateShader(GL_FRAGMENT_SHADER);
+
+				glShaderSource(VertexShaderHandle, 1, &VertexShaderSrc, 0);
+				glShaderSource(FragmentShaderHandle, 1, &FragmentShaderSrc, 0);
+
+				s32 VertexShaderIsValid;
+				s32 FragmentShaderIsValid;
+
+				char Buffer[512];
+
+				glCompileShader(VertexShaderHandle);
+				glGetShaderiv(VertexShaderHandle, GL_COMPILE_STATUS, &VertexShaderIsValid);
+				if(!VertexShaderIsValid)
+				{
+					glGetShaderInfoLog(VertexShaderHandle, 512, 0, Buffer);
+					printf("ERROR: Vertex Shader Compile Failed\n %s", Buffer);
+					return(-1);
+				}
+
+				glCompileShader(FragmentShaderHandle);
+				glGetShaderiv(FragmentShaderHandle, GL_COMPILE_STATUS, &FragmentShaderIsValid);
+				if(!FragmentShaderIsValid)
+				{
+					glGetShaderInfoLog(FragmentShaderHandle, 512, 0, Buffer);
+					printf("ERROR: Fragment Shader Compile Failed\n %s", Buffer);
+					return(-1);
+				}
+
+				u32 ShaderProgram;
+				ShaderProgram = glCreateProgram();
+				glAttachShader(ShaderProgram, VertexShaderHandle);
+				glAttachShader(ShaderProgram, FragmentShaderHandle);
+				glLinkProgram(ShaderProgram);
+
+				b32 ProgramIsValid;
+				glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &ProgramIsValid);
+				if(!ProgramIsValid)
+				{
+					glGetProgramInfoLog(ShaderProgram, 512, 0, Buffer);
+					printf("ERROR: Program link failed\n %s", Buffer);
+					return(-1);
+				}
+
+				glDeleteShader(VertexShaderHandle);
+				glDeleteShader(FragmentShaderHandle);
+
+				f32 Positions[] = {
+					-0.5f, -0.5f, 0.0f,
+					0.5f, -0.5f, 0.0f,
+					0.0f,  0.5f, 0.0f
+				}; 
+
+				u32 VBO, VAO;
+				glGenVertexArrays(1, &VAO);
+				glGenBuffers(1, &VBO);
+				glBindVertexArray(VAO);
+
+				glBindBuffer(GL_ARRAY_BUFFER, VBO);
+				glBufferData(GL_ARRAY_BUFFER, sizeof(Positions), Positions, GL_STATIC_DRAW);
+
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
+				glEnableVertexAttribArray(0);
+
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				glBindVertexArray(0);
+
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
+					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+					glClear(GL_COLOR_BUFFER_BIT);
+
+					glUseProgram(ShaderProgram);
+					glBindVertexArray(VAO);
+					glDrawArrays(GL_TRIANGLES, 0, 3);
+
+					glfwSwapBuffers(Window.Handle);
+					glfwPollEvents();
 				}
+
+#endif
 			}
 		}
 	}
