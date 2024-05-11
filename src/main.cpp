@@ -9,7 +9,7 @@
  [] Handle meshes with materials
  [] Init mesh using recursion so only have to traverse tree once? (bad idea??)
  [] Skeletal animation transforms
-
+ [] Remove crt functions
 
 */
 
@@ -157,7 +157,7 @@ StringEndsWith(string S, char C)
 
 #if 1
 internal void
-ParseFloatArray(f32 *Dest, u32 DestCount, string Data)
+ParseF32Array(f32 *Dest, u32 DestCount, string Data)
 {
 	char *Scan = (char *)Data.Data;
 	for(u32 Index = 0; Index < DestCount; ++Index)
@@ -184,7 +184,7 @@ IsNumber(char C)
 
 
 internal void
-ParseIndexArray(u32 *Dest, u32 DestCount, string Data)
+ParseS32Array(u32 *Dest, u32 DestCount, string Data)
 {
 	char *Scan = (char *)Data.Data;
 	for(u32 Index = 0; Index < DestCount; ++Index)
@@ -230,7 +230,7 @@ MeshInit(xml_node *Root, mesh *Mesh)
 							Mesh->PositionsCount = S32FromASCII(Attribute->Value.Data);
 							Mesh->Positions = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
 
-							ParseFloatArray(Mesh->Positions, Mesh->PositionsCount, Node->InnerText);
+							ParseF32Array(Mesh->Positions, Mesh->PositionsCount, Node->InnerText);
 						}
 					}
 				}
@@ -244,7 +244,7 @@ MeshInit(xml_node *Root, mesh *Mesh)
 							Mesh->NormalsCount = S32FromASCII(Attribute->Value.Data);
 							Mesh->Normals = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
 
-							ParseFloatArray(Mesh->Normals, Mesh->NormalsCount, Node->InnerText);
+							ParseF32Array(Mesh->Normals, Mesh->NormalsCount, Node->InnerText);
 						}
 					}
 				}
@@ -258,7 +258,7 @@ MeshInit(xml_node *Root, mesh *Mesh)
 							Mesh->UVCount = S32FromASCII(Attribute->Value.Data);
 							Mesh->UV = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
 
-							ParseFloatArray(Mesh->UV, Mesh->UVCount, Node->InnerText);
+							ParseF32Array(Mesh->UV, Mesh->UVCount, Node->InnerText);
 						}
 					}
 				}
@@ -283,7 +283,7 @@ MeshInit(xml_node *Root, mesh *Mesh)
 				Assert(Mesh->IndicesCount > 0);
 				Assert(Mesh->Indices);
 
-				ParseIndexArray(Mesh->Indices, Mesh->IndicesCount, Node->InnerText);
+				ParseS32Array(Mesh->Indices, Mesh->IndicesCount, Node->InnerText);
 			}
 
 
@@ -301,7 +301,7 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 {
 	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
 	{
-		// NOTE(Justin): If the tag size is 0 the node has not been found yet, continue searching.
+		// NOTE(Justin): If the tag size is 0 the node has not been found yet, continue searching OW break.
 		if(N->Tag.Size == 0)
 		{
 			xml_node *Node = Root->Children[Index];
@@ -309,6 +309,15 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 			{
 				if(StringsAreSame((char *)Node->Tag.Data, TagName))
 				{
+
+					// NOTE(Justin): Tags either have/do not have an ID.
+					// Tags without IDs essentially tell us that we have
+					// reached a part of the file containing a new bucket of
+					// information, so we can just return the node. OTOH if
+					// a tag has an ID then we are in a bucket that contains
+					// specific information and we use the ID to ensure we are
+					// at the node that contains the info. we are looking for.
+
 					if(ID)
 					{
 						if(SubStringExists(Node->Attributes->Value, ID))
@@ -605,10 +614,10 @@ MeshInit(loaded_dae DaeFile)
 	Mesh.UV = (f32 *)calloc(Mesh.UVCount, sizeof(f32));
 	Mesh.Indices = (u32 *)calloc(Mesh.IndicesCount, sizeof(u32));
 
-	ParseFloatArray(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
-	ParseFloatArray(Mesh.Normals, Mesh.NormalsCount, NodeNormal.InnerText);
-	ParseFloatArray(Mesh.UV, Mesh.UVCount, NodeUV.InnerText);
-	ParseIndexArray(Mesh.Indices, Mesh.IndicesCount, NodeIndex.InnerText);
+	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
+	ParseF32Array(Mesh.Normals, Mesh.NormalsCount, NodeNormal.InnerText);
+	ParseF32Array(Mesh.UV, Mesh.UVCount, NodeUV.InnerText);
+	ParseS32Array(Mesh.Indices, Mesh.IndicesCount, NodeIndex.InnerText);
 
 	return(Mesh);
 }
