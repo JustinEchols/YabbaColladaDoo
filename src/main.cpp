@@ -1074,7 +1074,7 @@ int main(int Argc, char **Argv)
 			//glfwSetMouseButtonCallback(Window.Handle, glfw_mouse_button_callback);
 			if(glewInit() == GLEW_OK)
 			{
-				loaded_dae CubeDae = ColladaFileLoad(Arena, "untitled.dae");
+				loaded_dae CubeDae = ColladaFileLoad(Arena, "cube.dae");
 				mesh Cube = MeshInit(Arena, CubeDae);
 
 				mat4 ModelTransorm = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
@@ -1130,7 +1130,6 @@ int main(int Argc, char **Argv)
 
 				u32 ShaderProgram = GLProgramCreate(VsSrc, FsSrc);
 
-#if 1
 #if 0
 				u32 BufferCount = Cube.PositionsCount + Cube.NormalsCount + Cube.UVCount;
 				memory_index BufferSize = BufferCount * sizeof(f32);
@@ -1186,67 +1185,6 @@ int main(int Argc, char **Argv)
 				glGenBuffers(1, &IBO);
 				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
 				glBufferData(GL_ELEMENT_ARRAY_BUFFER, Cube.IndicesCount * sizeof(u32), Cube.Indices, GL_STATIC_DRAW);
-
-				glUseProgram(ShaderProgram);
-				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
-				glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &MVP.E[0][0]);
-				//glUniform4f(UniformLocation, 1.0f, 0.0f, 0.0f, 1.0f);
-#endif
-#else
-				f32 cube_vertices[] =
-				{
-					-0.5f, -0.5f, -0.5f, 
-					0.5f, -0.5f, -0.5f,  
-					0.5f,  0.5f, -0.5f,  
-					0.5f,  0.5f, -0.5f,  
-					-0.5f,  0.5f, -0.5f, 
-					-0.5f, -0.5f, -0.5f, 
-
-					-0.5f, -0.5f,  0.5f, 
-					0.5f, -0.5f,  0.5f,  
-					0.5f,  0.5f,  0.5f,  
-					0.5f,  0.5f,  0.5f,  
-					-0.5f,  0.5f,  0.5f, 
-					-0.5f, -0.5f,  0.5f, 
-
-					-0.5f,  0.5f,  0.5f, 
-					-0.5f,  0.5f, -0.5f, 
-					-0.5f, -0.5f, -0.5f, 
-					-0.5f, -0.5f, -0.5f, 
-					-0.5f, -0.5f,  0.5f, 
-					-0.5f,  0.5f,  0.5f, 
-
-					0.5f,  0.5f,  0.5f,  
-					0.5f,  0.5f, -0.5f,  
-					0.5f, -0.5f, -0.5f,  
-					0.5f, -0.5f, -0.5f,  
-					0.5f, -0.5f,  0.5f,  
-					0.5f,  0.5f,  0.5f,  
-
-					-0.5f, -0.5f, -0.5f, 
-					0.5f, -0.5f, -0.5f,  
-					0.5f, -0.5f,  0.5f,  
-					0.5f, -0.5f,  0.5f,  
-					-0.5f, -0.5f,  0.5f, 
-					-0.5f, -0.5f, -0.5f, 
-
-					-0.5f,  0.5f, -0.5f, 
-					0.5f,  0.5f, -0.5f,  
-					0.5f,  0.5f,  0.5f,  
-					0.5f,  0.5f,  0.5f,  
-					-0.5f,  0.5f,  0.5f, 
-					-0.5f,  0.5f, -0.5f, 
-				};
-
-				u32 VBO, VAO;
-				glGenVertexArrays(1, &VAO);
-				glGenBuffers(1, &VBO);
-				glBindVertexArray(VAO);
-				glBindBuffer(GL_ARRAY_BUFFER, VBO);
-				glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices, GL_STATIC_DRAW);
-
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
-				glEnableVertexAttribArray(0);
 
 				glUseProgram(ShaderProgram);
 				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
