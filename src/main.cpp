@@ -11,9 +11,9 @@
  [] Skeletal animation transforms
  [] Remove crt functions
  [] Write collada file
- [] Do we need dynamix buffer sizes?
+ [] Do we need dynamic buffer sizes?
  [] For models we know we only need to read do we parse the entire file?
-
+ [] More careful buffering of text
 
 */
 
@@ -24,12 +24,16 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define internal static
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #define ArrayCount(A) sizeof(A) / sizeof((A)[0])
 #define Kilobyte(Count) (1024 * Count)
 #define Megabyte(Count) (1024 * Kilobyte(Count))
+
+#define PI32 3.1415926535897f
+#define DegreeToRad(Degrees) ((Degrees) * (PI32 / 180.0f))
 
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
 #define COLLADA_NODE_CHILDREN_MAX_COUNT 30
@@ -50,6 +54,10 @@ typedef float f32;
 
 typedef size_t memory_index;
 
+//
+// NOTE(Justin): Bump allocator
+//
+
 struct memory_arena
 {
 	u8 *Base;
@@ -65,7 +73,6 @@ ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
 	Arena->Used = 0;
 }
 
-
 #define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
 #define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
 internal void *
@@ -79,56 +86,360 @@ PushSize_(memory_arena *Arena, memory_index Size)
 	return(Result);
 }
 
+//
+// NOTE(Justin): Mesh & maths 
+//
+
+union v3
+{
+	struct
+	{
+		f32 x, y, z;
+	};
+	f32 E[3];
+};
+
+union v4
+{
+	struct
+	{
+		f32 x, y, z, w;
+	};
+	struct
+	{
+		union
+		{
+			v3 xyz;
+			struct
+			{
+				f32 x, y, z;
+			};
+		};
+		f32 w;
+	};
+	f32 E[4];
+};
+
+struct mat4
+{
+	f32 E[4][4];
+};
+
+inline v3
+V3(f32 X, f32 Y, f32 Z)
+{
+	v3 Result;
+
+	Result.x = X;
+	Result.y = Y;
+	Result.z = Z;
+
+	return(Result);
+}
+
+inline v4
+V4(v3 V, f32 C)
+{
+	v4 Result = {};
+
+	Result.xyz = V;
+	Result.w = C;
+
+	return(Result);
+}
+
+inline v3
+V3(f32 C)
+{
+	v3 Result = V3(C, C, C);
+	return(Result);
+}
+
+inline v3
+XAxis()
+{
+	v3 Result = V3(1.0f, 0.0f, 0.0f);
+	return(Result);
+}
+
+inline v3
+YAxis()
+{
+	v3 Result = V3(0.0f, 1.0f, 0.0f);
+	return(Result);
+}
+
+inline v3
+ZAxis()
+{
+	v3 Result = V3(0.0f, 0.0f, 1.0f);
+	return(Result);
+}
+
+
+
+inline v3
+operator +(v3 A, v3 B)
+{
+	v3 Result;
+
+	Result.x = A.x + B.x;
+	Result.y = A.y + B.y;
+	Result.z = A.z + B.z;
+
+	return(Result);
+}
+
+inline v3
+operator -(v3 A, v3 B)
+{
+	v3 Result;
+
+	Result.x = A.x - B.x;
+	Result.y = A.y - B.y;
+	Result.z = A.z - B.z;
+
+	return(Result);
+}
+
+inline v3
+operator *(f32 C, v3 V)
+{
+	v3 Result = {};
+
+	Result.x = C * V.x;
+	Result.y = C * V.y;
+	Result.z = C * V.z;
+
+	return(Result);
+}
+
+inline v3
+operator *(v3 V, f32 C)
+{
+	v3 Result = C * V;
+	return(Result);
+}
+
+inline f32
+Dot(v3 A, v3 B)
+{
+	f32 Result = A.x * B.x + A.y * B.y + A.z * B.z;
+	return(Result);
+}
+
+inline v3
+Cross(v3 A, v3 B)
+{
+	v3 Result;
+
+	Result.x = A.y * B.z - A.z * B.y;
+	Result.y = A.z * B.x - A.x * B.z;
+	Result.z = A.x * B.y - A.y * B.x;
+
+	return(Result);
+}
+
+
+
+inline v3
+Normalize(v3 V)
+{
+	v3 Result = {};
+
+	f32 Length = sqrtf(Dot(V, V));
+	if(Length != 0.0f)
+	{
+		Result = (1.0f / Length) * V;
+	}
+
+	return(Result);
+}
+
+internal mat4
+Mat4Identity()
+{
+	mat4 R =
+	{
+		{{1, 0, 0, 0},
+		{0, 1, 0, 0},
+		{0, 0, 1, 0},
+		{0, 0, 0, 1}}
+	};
+
+	return(R);
+}
+
+internal mat4
+Mat4(v3 X, v3 Y, v3 Z)
+{
+	mat4 R =
+	{
+		{{X.x, Y.x, Z.x, 0},
+		{X.y, Y.y, Z.y, 0},
+		{X.z, Y.z, Z.z, 0},
+		{0, 0, 0, 1}}
+	};
+
+	return(R);
+}
+
+internal mat4
+Mat4Scale(f32 C)
+{
+	mat4 R =
+	{
+		{{C, 0, 0, 0},
+		{0, C, 0, 0},
+		{0, 0, C, 0},
+		{0, 0, 0, 1}}
+	};
+
+	return(R);
+}
+
+internal mat4
+Mat4Translate(v3 V)
+{
+	mat4 R =
+	{
+		{{1, 0, 0, V.x},
+		{0, 1, 0, V.y},
+		{0, 0, 1, V.z},
+		{0, 0, 0, 1}}
+	};
+
+	return(R);
+}
+
+internal v4
+Mat4Transform(mat4 T, v4 V)
+{
+	v4 Result = {};
+
+	Result.x = T.E[0][0] * V.x + T.E[0][1] * V.y + T.E[0][2] * V.z + T.E[0][3] * V.w;
+	Result.y = T.E[1][0] * V.x + T.E[1][1] * V.y + T.E[1][2] * V.z + T.E[1][3] * V.w;
+	Result.z = T.E[2][0] * V.x + T.E[2][1] * V.y + T.E[2][2] * V.z + T.E[2][3] * V.w;
+	Result.w = T.E[3][0] * V.x + T.E[3][1] * V.y + T.E[3][2] * V.z + T.E[3][3] * V.w;
+
+	return(Result);
+}
+
+internal mat4
+Mat4TransposeMat3(mat4 T)
+{
+	mat4 R = T;
+
+	for(s32 i = 0; i < 3; ++i)
+	{
+		for(s32 j = 0; j < 3; ++j)
+		{
+			if((i != j) && (i < j))
+			{
+				f32 Temp =  R.E[j][i];
+				R.E[j][i] = R.E[i][j];
+				R.E[i][j] = Temp;
+			}
+		}
+	}
+
+	return(R);
+}
+
+inline v3
+operator*(mat4 T, v3 V)
+{
+	v3 Result = Mat4Transform(T, V4(V, 1.0)).xyz;
+	return(Result);
+}
+
+internal mat4
+Mat4Multiply(mat4 A, mat4 B)
+{
+	mat4 R = {};
+
+	for(s32 i = 0; i <= 3; ++i)
+	{
+		for(s32 j = 0; j <= 3; ++j)
+		{
+			for(s32 k = 0; k <= 3; ++k)
+			{
+				R.E[i][j] += A.E[i][k] * B.E[k][j];
+			}
+		}
+	}
+
+	return(R);
+}
+
+inline mat4
+operator*(mat4 A, mat4 B)
+{
+	mat4 R = Mat4Multiply(A, B);
+	return(R);
+}
+
+
+internal mat4
+Mat4Camera(v3 P, v3 Target)
+{
+	mat4 R;
+
+	v3 Z = Normalize(P - Target);
+	v3 X = Normalize(Cross(YAxis(), Z));
+	v3 Y = Normalize(Cross(Z, X));
+
+	mat4 CameraFrame = Mat4(X, Y, Z);
+
+	mat4 Translate = Mat4Translate(-1.0f * P);
+
+	R = Mat4TransposeMat3(CameraFrame) * Translate;
+
+	return(R);
+
+
+}
+
+internal mat4
+Mat4Perspective(f32 FOV, f32 AspectRatio, f32 ZNear, f32 ZFar)
+{
+	f32 HalfFOV = FOV / 2.0f;
+
+	mat4 R =
+	{
+		{{1.0f / (tanf(HalfFOV) * AspectRatio), 0.0f, 0.0f, 0.0f},
+		{0.0f, 1.0f / tanf(HalfFOV), 0.0f, 0.0f},
+		{0.0f, 0.0f, -1.0f * (ZFar + ZNear) / (ZFar - ZNear), -1.0f},
+		{0.0f, 0.0f, -1.0f, 0.0f}}
+	};
+
+	return(R);
+}
+
+
+
+struct mesh
+{
+	f32 *Positions;
+	f32 *Normals;
+	f32 *UV;
+	u32 *Indices;
+
+	u32 PositionsCount;
+	u32 NormalsCount;
+	u32 UVCount;
+	u32 IndicesCount;
+};
+
+//
+// NOTE(Justin): DAE/XML 
+//
+
 struct string
 {
 	u8 *Data;
 	u64 Size;
 };
-
-struct xml_attribute
-{
-	string Key;
-	string Value;
-};
-
-struct xml_node
-{
-	string Tag;
-	string InnerText;
-
-	s32 AttributeCountMax;
-	s32 AttributeCount;
-	xml_attribute *Attributes;
-
-	xml_node *Parent;
-
-	s32 ChildrenMaxCount;
-	s32 ChildrenCount;
-	xml_node **Children;
-};
-
-struct loaded_dae 
-{
-	char *FullPath;
-	xml_node *Root;
-};
-
-
-internal xml_node *
-PushXMLNode(memory_arena *Arena, xml_node *Parent)
-{
-	xml_node *Node = PushStruct(Arena, xml_node);
-
-	Node->AttributeCountMax = COLLADA_ATTRIBUTE_MAX_COUNT;
-
-	Node->Attributes = PushArray(Arena, Node->AttributeCountMax, xml_attribute);//(xml_attribute *)calloc(Node->AttributeCountMax, sizeof(xml_attribute));
-	Node->ChildrenMaxCount = COLLADA_NODE_CHILDREN_MAX_COUNT;
-
-	Node->Children = PushArray(Arena, Node->ChildrenMaxCount, xml_node *);
-	Node->Parent = Parent;
-
-	return(Node);
-}
 
 internal b32
 StringsAreSame(char *S1, char *S2)
@@ -143,19 +454,6 @@ StringsAreSame(string S1, char *S2)
 	b32 Result = StringsAreSame((char *)S1.Data, S2);
 	return(Result);
 }
-
-struct mesh
-{
-	f32 *Positions;
-	f32 *Normals;
-	f32 *UV;
-	u32 *Indices;
-
-	u32 PositionsCount;
-	u32 NormalsCount;
-	u32 UVCount;
-	u32 IndicesCount;
-};
 
 internal b32
 SubStringExists(char *HayStack, char *Needle)
@@ -173,13 +471,7 @@ SubStringExists(char *HayStack, char *Needle)
 internal b32
 SubStringExists(string HayStack, char *Needle)
 {
-	b32 Result = false;
-	char *S = strstr((char *)HayStack.Data, Needle);
-	if(S)
-	{
-		Result = true;
-	}
-
+	b32 Result = SubStringExists((char *)HayStack.Data, Needle);
 	return(Result);
 }
 
@@ -211,29 +503,31 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Data)
 	}
 }
 
-internal b32
-IsNumber(char C)
-{
-	b32 Result = ((C >= '0') && (C <= '9'));
-	return(Result);
-}
-
-
 internal void
 ParseS32Array(u32 *Dest, u32 DestCount, string Data)
 {
-	char *Scan = (char *)Data.Data;
-	for(u32 Index = 0; Index < DestCount; ++Index)
-	{
-		Dest[Index] = (u32)atoi(Scan);
-		while(*Scan != ' ' && *(Scan + 1) != '\0')
-		{
-			Scan++;
-		}
+	char Delimeter[] = " ";
+	char *Token;
 
-		if(*(Scan + 1) != '\0')
+	u32 TokenCount = 0;
+	Token = strtok((char *)Data.Data, Delimeter);
+
+	u32 Index = 0;
+	Dest[Index++] = (u32)atoi(Token);
+
+	while(Token)
+	{
+		Token = strtok(0, Delimeter);
+		TokenCount++;
+		if(TokenCount == 3)
 		{
-			Scan++;
+			Dest[Index++] = (u32)atoi(Token);
+			TokenCount = 0;
+			
+			if(Index == (DestCount))
+			{
+				break;
+			}
 		}
 	}
 }
@@ -243,6 +537,50 @@ S32FromASCII(u8 *S)
 {
 	s32 Result = atoi((char *)S);
 	return(Result);
+}
+
+struct xml_attribute
+{
+	string Key;
+	string Value;
+};
+
+struct xml_node
+{
+	string Tag;
+	string InnerText;
+
+	s32 AttributeCountMax;
+	s32 AttributeCount;
+	xml_attribute *Attributes;
+
+	xml_node *Parent;
+
+	s32 ChildrenMaxCount;
+	s32 ChildrenCount;
+	xml_node **Children;
+};
+
+struct loaded_dae 
+{
+	char *FullPath;
+	xml_node *Root;
+};
+
+internal xml_node *
+PushXMLNode(memory_arena *Arena, xml_node *Parent)
+{
+	xml_node *Node = PushStruct(Arena, xml_node);
+
+	Node->AttributeCountMax = COLLADA_ATTRIBUTE_MAX_COUNT;
+
+	Node->Attributes = PushArray(Arena, Node->AttributeCountMax, xml_attribute);
+	Node->ChildrenMaxCount = COLLADA_NODE_CHILDREN_MAX_COUNT;
+
+	Node->Children = PushArray(Arena, Node->ChildrenMaxCount, xml_node *);
+	Node->Parent = Parent;
+
+	return(Node);
 }
 
 internal xml_attribute
@@ -263,7 +601,6 @@ NodeAttributeGet(xml_node *Node, char *AttrName)
 
 
 // NOTE(Justin): Something very bad is happening when parsing using this routine
-
 #if 0
 internal void 
 MeshInit(xml_node *Root, mesh *Mesh)
@@ -324,8 +661,6 @@ MeshInit(xml_node *Root, mesh *Mesh)
 }
 #endif
 
-
-
 internal void
 NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 {
@@ -373,8 +708,6 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 	}
 }
 
-
-
 internal loaded_dae
 ColladaFileLoad(memory_arena *Arena, char *FileName)
 {
@@ -397,6 +730,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		char TagEnd = '>';
 		//char ForwardSlash = '/';
 
+		// NOTE(Justin): Totally making up the size of the buffer.
 		char *Buffer = (char *)calloc(Size/4, sizeof(char));
 		s32 InnerTextIndex = 0;
 		s32 Index = 0;
@@ -561,9 +895,12 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		fclose(FileHandle);
 	}
 
-
 	return(Result);
 }
+
+//
+// NOTE(Justin): GLFW & GL
+//
 
 struct window
 {
@@ -584,15 +921,16 @@ GLFWFrameBufferResizeCallBack(GLFWwindow *Window, s32 Width, s32 Height)
 }
 
 internal void GLAPIENTRY
-OpenGLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length,
+GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length,
 		const GLchar *Message, const void *UserParam)
 {
 	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
+
 #if 1
 internal mesh
-MeshInit(loaded_dae DaeFile)
+MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 {
 	mesh Mesh = {};
 
@@ -626,12 +964,12 @@ MeshInit(loaded_dae DaeFile)
 	Mesh.UVCount = S32FromASCII(AttrUV.Value.Data);
 
 	xml_attribute AttrI = NodeAttributeGet(NodeIndex.Parent, "count");
-	Mesh.IndicesCount = 3 * 3 * S32FromASCII(AttrI.Value.Data);
+	Mesh.IndicesCount = 3 * S32FromASCII(AttrI.Value.Data);
 
-	Mesh.Positions = (f32 *)calloc(Mesh.PositionsCount, sizeof(f32));
-	Mesh.Normals = (f32 *)calloc(Mesh.NormalsCount, sizeof(f32));
-	Mesh.UV = (f32 *)calloc(Mesh.UVCount, sizeof(f32));
-	Mesh.Indices = (u32 *)calloc(Mesh.IndicesCount, sizeof(u32));
+	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
+	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
+	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
+	Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
 
 	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
 	ParseF32Array(Mesh.Normals, Mesh.NormalsCount, NodeNormal.InnerText);
@@ -642,9 +980,71 @@ MeshInit(loaded_dae DaeFile)
 }
 #endif
 
+internal u32
+GLProgramCreate(char *VS, char *FS)
+{
+	u32 VSHandle;
+	u32 FSHandle;
+
+	VSHandle = glCreateShader(GL_VERTEX_SHADER);
+	FSHandle = glCreateShader(GL_FRAGMENT_SHADER);
+
+	glShaderSource(VSHandle, 1, &VS, 0);
+	glShaderSource(FSHandle, 1, &FS, 0);
+
+	b32 VSIsValid = false;
+	b32 FSIsValid = false;
+	char Buffer[512];
+
+	glCompileShader(VSHandle);
+	glGetShaderiv(VSHandle, GL_COMPILE_STATUS, &VSIsValid);
+	if(!VSIsValid)
+	{
+		glGetShaderInfoLog(VSHandle, 512, 0, Buffer);
+		printf("ERROR: Vertex Shader Compile Failed\n %s", Buffer);
+	}
+
+	glCompileShader(FSHandle);
+	glGetShaderiv(FSHandle, GL_COMPILE_STATUS, &FSIsValid);
+	if(!FSIsValid)
+	{
+		glGetShaderInfoLog(FSHandle, 512, 0, Buffer);
+		printf("ERROR: Fragment Shader Compile Failed\n %s", Buffer);
+	}
+
+	u32 Program;
+	Program = glCreateProgram();
+	glAttachShader(Program, VSHandle);
+	glAttachShader(Program, FSHandle);
+	glLinkProgram(Program);
+	glValidateProgram(Program);
+
+	b32 ProgramIsValid = false;
+	glGetProgramiv(Program, GL_LINK_STATUS, &ProgramIsValid);
+	if(!ProgramIsValid)
+	{
+		glGetProgramInfoLog(Program, 512, 0, Buffer);
+		printf("ERROR: Program link failed\n %s", Buffer);
+	}
+
+	glDeleteShader(VSHandle);
+	glDeleteShader(FSHandle);
+
+	u32 Result = Program;
+	//Result = (VSIsValid && FSIsValid && ProgramIsValid);
+
+	return(Result);
+}
+
+internal b32
+UniformIsValid(s32 Location)
+{
+	b32 Result = (Location != -1);
+	return(Result);
+}
+
 int main(int Argc, char **Argv)
 {
-
 	void *Memory = calloc(Megabyte(1), sizeof(u8));
 
 	memory_arena Arena_;
@@ -674,94 +1074,66 @@ int main(int Argc, char **Argv)
 			//glfwSetMouseButtonCallback(Window.Handle, glfw_mouse_button_callback);
 			if(glewInit() == GLEW_OK)
 			{
-				const GLubyte *RendererName = glGetString(GL_RENDERER);
-				const GLubyte* RendererVersion = glGetString(GL_VERSION);
-				printf("Renderer = %s\n", RendererName);
-				printf("Renderer version = %s\n", RendererVersion);
+				loaded_dae CubeDae = ColladaFileLoad(Arena, "untitled.dae");
+				mesh Cube = MeshInit(Arena, CubeDae);
+
+				mat4 ModelTransorm = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
+
+				v3 P = V3(3.0f, 0.0f, 3.0f);
+				v3 Direction = V3(0.0f, 0.0f, -1.0f);
+				mat4 CameraTransform = Mat4Camera(P, P + Direction);
+
+				f32 FOV = DegreeToRad(45.0f);
+				f32 Aspect = (f32)Window.Width / (f32)Window.Height;
+				f32 ZNear = 0.1f;
+				f32 ZFar = 100.0f;
+
+				mat4 PerspectiveTransform = Mat4Perspective(FOV, Aspect, ZNear, ZFar);
+
+				mat4 MVP = PerspectiveTransform *
+						   CameraTransform *
+						   ModelTransorm;
 
 				glEnable(GL_DEBUG_OUTPUT);
-				glDebugMessageCallback(OpenGLDebugCallback, 0);
+				glDebugMessageCallback(GLDebugCallback, 0);
 
-				glEnable(GL_DEPTH_TEST);
-				glDepthFunc(GL_LESS);
+
+				glFrontFace(GL_CCW);
+				glEnable(GL_CULL_FACE);
+				glCullFace(GL_BACK);
+
+				//glEnable(GL_DEPTH_TEST);
+				//glDepthFunc(GL_LESS);
 
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-				loaded_dae CubeDae = ColladaFileLoad(Arena, "untitled.dae");
-				mesh Cube = MeshInit(CubeDae);
-
-				char *VertexShaderSrc = R"(
+				char *VsSrc = R"(
 				#version 330 core
 				layout (location = 0) in vec3 P;
+
+				uniform mat4 MVP;
 				void main()
 				{
-					gl_Position = vec4(P.x, P.y, P.z, 1.0f);
+					gl_Position = MVP * vec4(P, 1.0);
 				})";
 
-				char *FragmentShaderSrc = R"(
+				char *FsSrc = R"(
 				#version 330 core
 				out vec4 FragColor;
+				uniform vec4 uColor;
 				void main()
 				{
-					FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+					FragColor = vec4(1.0, 0, 0, 1.0);
 				})";
 
-				u32 VertexShaderHandle;
-				u32 FragmentShaderHandle;
 
-				VertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
-				FragmentShaderHandle = glCreateShader(GL_FRAGMENT_SHADER);
+				u32 ShaderProgram = GLProgramCreate(VsSrc, FsSrc);
 
-				glShaderSource(VertexShaderHandle, 1, &VertexShaderSrc, 0);
-				glShaderSource(FragmentShaderHandle, 1, &FragmentShaderSrc, 0);
-
-				b32 VertexShaderIsValid = false;
-				b32 FragmentShaderIsValid = false;
-
-				char Buffer[512];
-
-				glCompileShader(VertexShaderHandle);
-				glGetShaderiv(VertexShaderHandle, GL_COMPILE_STATUS, &VertexShaderIsValid);
-				if(!VertexShaderIsValid)
-				{
-					glGetShaderInfoLog(VertexShaderHandle, 512, 0, Buffer);
-					printf("ERROR: Vertex Shader Compile Failed\n %s", Buffer);
-					return(-1);
-				}
-
-				glCompileShader(FragmentShaderHandle);
-				glGetShaderiv(FragmentShaderHandle, GL_COMPILE_STATUS, &FragmentShaderIsValid);
-				if(!FragmentShaderIsValid)
-				{
-					glGetShaderInfoLog(FragmentShaderHandle, 512, 0, Buffer);
-					printf("ERROR: Fragment Shader Compile Failed\n %s", Buffer);
-					return(-1);
-				}
-
-				u32 ShaderProgram;
-				ShaderProgram = glCreateProgram();
-				glAttachShader(ShaderProgram, VertexShaderHandle);
-				glAttachShader(ShaderProgram, FragmentShaderHandle);
-				glLinkProgram(ShaderProgram);
-
-				b32 ProgramIsValid = false;
-				glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &ProgramIsValid);
-				if(!ProgramIsValid)
-				{
-					glGetProgramInfoLog(ShaderProgram, 512, 0, Buffer);
-					printf("ERROR: Program link failed\n %s", Buffer);
-					return(-1);
-				}
-
-				glDeleteShader(VertexShaderHandle);
-				glDeleteShader(FragmentShaderHandle);
-
-				f32 Positions[] = {
-					-0.5f, -0.5f, 0.0f,
-					0.5f, -0.5f, 0.0f,
-					0.0f,  0.5f, 0.0f
-				}; 
+#if 1
+#if 0
+				u32 BufferCount = Cube.PositionsCount + Cube.NormalsCount + Cube.UVCount;
+				memory_index BufferSize = BufferCount * sizeof(f32);
 
 				u32 VBO, VAO;
 				glGenVertexArrays(1, &VAO);
@@ -769,22 +1141,125 @@ int main(int Argc, char **Argv)
 				glBindVertexArray(VAO);
 
 				glBindBuffer(GL_ARRAY_BUFFER, VBO);
-				glBufferData(GL_ARRAY_BUFFER, sizeof(Positions), Positions, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, BufferSize, 0, GL_STATIC_DRAW);
 
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
+				memory_index Offset = 0;
+				glBufferSubData(GL_ARRAY_BUFFER, Offset, Cube.PositionsCount * sizeof(f32), Cube.Positions);
+
+				Offset += Cube.PositionsCount * sizeof(f32);
+				glBufferSubData(GL_ARRAY_BUFFER, Offset, Cube.NormalsCount * sizeof(f32), Cube.Normals);
+
+				Offset += Cube.NormalsCount * sizeof(f32);
+				glBufferSubData(GL_ARRAY_BUFFER, Offset, Cube.UVCount * sizeof(f32), Cube.UV);
+
+
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
+				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void *)(Cube.PositionsCount * sizeof(f32)));
+				glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void *)((Cube.PositionsCount + Cube.NormalsCount) * sizeof(f32)));
+
+				glEnableVertexAttribArray(0);
+				glEnableVertexAttribArray(1);
+				glEnableVertexAttribArray(2);
+
+				u32 IBO;
+				glGenBuffers(1, &IBO);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, Cube.IndicesCount * sizeof(u32), Cube.Indices, GL_STATIC_DRAW);
+
+				glUseProgram(ShaderProgram);
+				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
+				glUniformMatrix4fv(UniformLocation, 1, GL_FALSE, &MVP.E[0][0]);
+				//glUniform4f(UniformLocation, 1.0f, 0.0f, 0.0f, 1.0f);
+#else
+
+				u32 PosVB, PosVA;
+
+				glGenVertexArrays(1, &PosVA);
+				glGenBuffers(1, &PosVB);
+				glBindVertexArray(PosVA);
+				glBindBuffer(GL_ARRAY_BUFFER, PosVB);
+				glBufferData(GL_ARRAY_BUFFER, Cube.PositionsCount * sizeof(f32), Cube.Positions, GL_STATIC_DRAW);
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
 				glEnableVertexAttribArray(0);
 
-				glBindBuffer(GL_ARRAY_BUFFER, 0);
-				glBindVertexArray(0);
+				u32 IBO;
+				glGenBuffers(1, &IBO);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, Cube.IndicesCount * sizeof(u32), Cube.Indices, GL_STATIC_DRAW);
+
+				glUseProgram(ShaderProgram);
+				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
+				glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &MVP.E[0][0]);
+				//glUniform4f(UniformLocation, 1.0f, 0.0f, 0.0f, 1.0f);
+#endif
+#else
+				f32 cube_vertices[] =
+				{
+					-0.5f, -0.5f, -0.5f, 
+					0.5f, -0.5f, -0.5f,  
+					0.5f,  0.5f, -0.5f,  
+					0.5f,  0.5f, -0.5f,  
+					-0.5f,  0.5f, -0.5f, 
+					-0.5f, -0.5f, -0.5f, 
+
+					-0.5f, -0.5f,  0.5f, 
+					0.5f, -0.5f,  0.5f,  
+					0.5f,  0.5f,  0.5f,  
+					0.5f,  0.5f,  0.5f,  
+					-0.5f,  0.5f,  0.5f, 
+					-0.5f, -0.5f,  0.5f, 
+
+					-0.5f,  0.5f,  0.5f, 
+					-0.5f,  0.5f, -0.5f, 
+					-0.5f, -0.5f, -0.5f, 
+					-0.5f, -0.5f, -0.5f, 
+					-0.5f, -0.5f,  0.5f, 
+					-0.5f,  0.5f,  0.5f, 
+
+					0.5f,  0.5f,  0.5f,  
+					0.5f,  0.5f, -0.5f,  
+					0.5f, -0.5f, -0.5f,  
+					0.5f, -0.5f, -0.5f,  
+					0.5f, -0.5f,  0.5f,  
+					0.5f,  0.5f,  0.5f,  
+
+					-0.5f, -0.5f, -0.5f, 
+					0.5f, -0.5f, -0.5f,  
+					0.5f, -0.5f,  0.5f,  
+					0.5f, -0.5f,  0.5f,  
+					-0.5f, -0.5f,  0.5f, 
+					-0.5f, -0.5f, -0.5f, 
+
+					-0.5f,  0.5f, -0.5f, 
+					0.5f,  0.5f, -0.5f,  
+					0.5f,  0.5f,  0.5f,  
+					0.5f,  0.5f,  0.5f,  
+					-0.5f,  0.5f,  0.5f, 
+					-0.5f,  0.5f, -0.5f, 
+				};
+
+				u32 VBO, VAO;
+				glGenVertexArrays(1, &VAO);
+				glGenBuffers(1, &VBO);
+				glBindVertexArray(VAO);
+				glBindBuffer(GL_ARRAY_BUFFER, VBO);
+				glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices, GL_STATIC_DRAW);
+
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
+				glEnableVertexAttribArray(0);
+
+				glUseProgram(ShaderProgram);
+				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
+				glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &MVP.E[0][0]);
+#endif
 
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-					glClear(GL_COLOR_BUFFER_BIT);
+					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-					glUseProgram(ShaderProgram);
-					glBindVertexArray(VAO);
-					glDrawArrays(GL_TRIANGLES, 0, 3);
+					//glDrawArrays(GL_TRIANGLES, 0, 36);
+					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
 					glfwPollEvents();
