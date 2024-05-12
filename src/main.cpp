@@ -1070,8 +1070,6 @@ int main(int Argc, char **Argv)
 			glfwMakeContextCurrent(Window.Handle);
 			glfwSetInputMode(Window.Handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
-			//glfwSetCursorPosCallback(Window.Handle, glfw_mouse_callback);
-			//glfwSetMouseButtonCallback(Window.Handle, glfw_mouse_button_callback);
 			if(glewInit() == GLEW_OK)
 			{
 				loaded_dae CubeDae = ColladaFileLoad(Arena, "cube.dae");
@@ -1097,13 +1095,9 @@ int main(int Argc, char **Argv)
 				glEnable(GL_DEBUG_OUTPUT);
 				glDebugMessageCallback(GLDebugCallback, 0);
 
-
 				glFrontFace(GL_CCW);
 				glEnable(GL_CULL_FACE);
 				glCullFace(GL_BACK);
-
-				//glEnable(GL_DEPTH_TEST);
-				//glDepthFunc(GL_LESS);
 
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1130,47 +1124,6 @@ int main(int Argc, char **Argv)
 
 				u32 ShaderProgram = GLProgramCreate(VsSrc, FsSrc);
 
-#if 0
-				u32 BufferCount = Cube.PositionsCount + Cube.NormalsCount + Cube.UVCount;
-				memory_index BufferSize = BufferCount * sizeof(f32);
-
-				u32 VBO, VAO;
-				glGenVertexArrays(1, &VAO);
-				glGenBuffers(1, &VBO);
-				glBindVertexArray(VAO);
-
-				glBindBuffer(GL_ARRAY_BUFFER, VBO);
-				glBufferData(GL_ARRAY_BUFFER, BufferSize, 0, GL_STATIC_DRAW);
-
-				memory_index Offset = 0;
-				glBufferSubData(GL_ARRAY_BUFFER, Offset, Cube.PositionsCount * sizeof(f32), Cube.Positions);
-
-				Offset += Cube.PositionsCount * sizeof(f32);
-				glBufferSubData(GL_ARRAY_BUFFER, Offset, Cube.NormalsCount * sizeof(f32), Cube.Normals);
-
-				Offset += Cube.NormalsCount * sizeof(f32);
-				glBufferSubData(GL_ARRAY_BUFFER, Offset, Cube.UVCount * sizeof(f32), Cube.UV);
-
-
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
-				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void *)(Cube.PositionsCount * sizeof(f32)));
-				glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void *)((Cube.PositionsCount + Cube.NormalsCount) * sizeof(f32)));
-
-				glEnableVertexAttribArray(0);
-				glEnableVertexAttribArray(1);
-				glEnableVertexAttribArray(2);
-
-				u32 IBO;
-				glGenBuffers(1, &IBO);
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
-				glBufferData(GL_ELEMENT_ARRAY_BUFFER, Cube.IndicesCount * sizeof(u32), Cube.Indices, GL_STATIC_DRAW);
-
-				glUseProgram(ShaderProgram);
-				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
-				glUniformMatrix4fv(UniformLocation, 1, GL_FALSE, &MVP.E[0][0]);
-				//glUniform4f(UniformLocation, 1.0f, 0.0f, 0.0f, 1.0f);
-#else
-
 				u32 PosVB, PosVA;
 
 				glGenVertexArrays(1, &PosVA);
@@ -1189,14 +1142,12 @@ int main(int Argc, char **Argv)
 				glUseProgram(ShaderProgram);
 				s32 UniformLocation = glGetUniformLocation(ShaderProgram, "MVP");
 				glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &MVP.E[0][0]);
-#endif
 
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-					//glDrawArrays(GL_TRIANGLES, 0, 36);
 					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
