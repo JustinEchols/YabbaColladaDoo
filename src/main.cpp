@@ -1,6 +1,20 @@
 
 /*
 
+ NOTE(Justin): The indices in a collada file look like
+
+	<p>i0 i1 i2 i3 i4...</p>
+
+ and they are grouped (for this file) as
+
+	P0 N0 UV0 P1 N1 UV1...
+
+ thus the indices that we need to pass to glDrawElements is
+
+	P0 P1 P2 P3...
+
+ The parsing is done in ParseS32Array.
+
  TODO(Justin):
  [] Change children array from fixed size to allocate on demand
  [] Clean up logic
@@ -13,7 +27,8 @@
  [] Write collada file
  [] Do we need dynamic buffer sizes?
  [] For models we know we only need to read do we parse the entire file?
- [] More careful buffering of text
+ [] Better buffering of text (strtok)
+ [] Rename ParseS32Array
 
 */
 
