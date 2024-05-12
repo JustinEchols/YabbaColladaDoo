@@ -5,7 +5,7 @@
 
 	<p>i0 i1 i2 i3 i4...</p>
 
- and they are grouped (for this file) as
+ and they are grouped (for cube.dae) as
 
 	P0 N0 UV0 P1 N1 UV1...
 
@@ -191,8 +191,6 @@ ZAxis()
 	return(Result);
 }
 
-
-
 inline v3
 operator +(v3 A, v3 B)
 {
@@ -254,8 +252,6 @@ Cross(v3 A, v3 B)
 
 	return(Result);
 }
-
-
 
 inline v3
 Normalize(v3 V)
@@ -394,7 +390,6 @@ operator*(mat4 A, mat4 B)
 	return(R);
 }
 
-
 internal mat4
 Mat4Camera(v3 P, v3 Target)
 {
@@ -430,8 +425,6 @@ Mat4Perspective(f32 FOV, f32 AspectRatio, f32 ZNear, f32 ZFar)
 
 	return(R);
 }
-
-
 
 struct mesh
 {
@@ -942,8 +935,7 @@ GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei 
 	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
-
-#if 1
+// TODO(Justin): Traverse the tree once.
 internal mesh
 MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 {
@@ -993,7 +985,6 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 	return(Mesh);
 }
-#endif
 
 internal u32
 GLProgramCreate(char *VS, char *FS)
@@ -1046,15 +1037,7 @@ GLProgramCreate(char *VS, char *FS)
 	glDeleteShader(FSHandle);
 
 	u32 Result = Program;
-	//Result = (VSIsValid && FSIsValid && ProgramIsValid);
 
-	return(Result);
-}
-
-internal b32
-UniformIsValid(s32 Location)
-{
-	b32 Result = (Location != -1);
 	return(Result);
 }
 
@@ -1092,8 +1075,8 @@ int main(int Argc, char **Argv)
 
 				mat4 ModelTransorm = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
 
-				v3 P = V3(3.0f, 0.0f, 3.0f);
-				v3 Direction = V3(0.0f, 0.0f, -1.0f);
+				v3 P = V3(0.0f, 5.0f, 3.0f);
+				v3 Direction = V3(0.0f, -0.5f, -1.0f);
 				mat4 CameraTransform = Mat4Camera(P, P + Direction);
 
 				f32 FOV = DegreeToRad(45.0f);
