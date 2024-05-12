@@ -716,6 +716,36 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 	}
 }
 
+internal string
+StringFromRange(u8 *First, u8 *Last)
+{
+	string Result = {First, (u64)(Last - First)};
+	return(Result);
+}
+
+internal string
+String(u8 *Cstr)
+{
+	u8 *C = Cstr;
+	for(; *C; ++C);
+	string Result = StringFromRange(Cstr, C);
+
+	return(Result);
+}
+
+internal xml_node *
+ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
+{
+	xml_node *LastChild = PushXMLNode(Arena, Parent);
+
+	Parent->Children[Parent->ChildrenCount] = LastChild;
+	Parent->ChildrenCount++;
+
+	Assert(Parent->ChildrenCount < COLLADA_NODE_CHILDREN_MAX_COUNT);
+
+	return(LastChild);
+}
+
 internal loaded_dae
 ColladaFileLoad(memory_arena *Arena, char *FileName)
 {
@@ -733,13 +763,14 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
 		fread(Content, 1, Size, FileHandle);
 		Content[Size] = '\0';
+		fclose(FileHandle);
 
 		char TagStart = '<';
 		char TagEnd = '>';
 		//char ForwardSlash = '/';
 
 		// NOTE(Justin): Totally making up the size of the buffer.
-		char *Buffer = (char *)calloc(Size/4, sizeof(char));
+		char *Buffer = (char *)calloc(Size/2, sizeof(char));
 		s32 InnerTextIndex = 0;
 		s32 Index = 0;
 
@@ -751,11 +782,53 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			Buffer[InnerTextIndex++] = Content[Index++];
 			Buffer[InnerTextIndex] = '\0';
 		}
+
 		InnerTextIndex = 0;
-		Index -= ((s32)strlen("COLLADA") + 1);
+		Index -= ((s32)strlen("<COLLADA") + 1);
+
+#if 0
+		char TagDelimeters[] = "<>";
+		string Token = String((u8 *)strtok((char *)(Content + Index), TagDelimeters));
+		while(Token.Data)
+		{
+			Token = String((u8 *)strtok(0, TagDelimeters));
+			if(SubStringExists(Token, " ") && !CurrentNode->Tag.Data)
+			{
+				CurrentNode->Tag = Token;
+			}
+			else if(SubStringExists(Token, " ") && CurrentNode->Tag.Data && !CurrentNode->InnerText.Data)
+			{
+				CurrentNode->InnerText = Token;
+			}
+			else if(SubStringExists(Token, "-") && !CurrentNode->InnerText.Data)
+			{
+				CurrentNode->InnerText = Token;
+			}
+			else if(Token.Data[0] == '/')
+			{
+				if(CurrentNode->Parent)
+				{
+					CurrentNode = CurrentNode->Parent;
+				}
+				else
+				{
+					break;
+				}
+			}
+			else
+			{
+				// NOTE(Justin): Child node
+
+				CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+				CurrentNode->Tag = Token;
+			}
+
+		}
+#endif
 
 		while(Content[Index] != '\0')
 		{
+
 			if(!CurrentNode->Tag.Data)
 			{
 				Index++;
@@ -879,13 +952,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				else if(Content[Index] == '<')
 				{
 					// NOTE(Justin): Child node exists
-					xml_node *LastChild = PushXMLNode(Arena, CurrentNode);
-					CurrentNode->Children[CurrentNode->ChildrenCount] = LastChild;
-					CurrentNode->ChildrenCount++;
-
-					// TODO(Justin): On-demand allocation of children nodes (currently capped).
-					Assert(CurrentNode->ChildrenCount < COLLADA_NODE_CHILDREN_MAX_COUNT);
-					CurrentNode = LastChild;
+					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
 				}
 				else
 				{
@@ -900,7 +967,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			}
 		}
 
-		fclose(FileHandle);
+		free(Buffer);
 	}
 
 	return(Result);
@@ -1123,7 +1190,6 @@ int main(int Argc, char **Argv)
 				u32 ShaderProgram = GLProgramCreate(VsSrc, FsSrc);
 
 				u32 PosVB, PosVA;
-
 				glGenVertexArrays(1, &PosVA);
 				glGenBuffers(1, &PosVB);
 				glBindVertexArray(PosVA);
@@ -1146,7 +1212,7 @@ int main(int Argc, char **Argv)
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+					glDrawElements(GL_TRIANGLES, Cube.IndicesCount, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
 					glfwPollEvents();
