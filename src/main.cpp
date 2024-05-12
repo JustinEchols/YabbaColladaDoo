@@ -492,6 +492,23 @@ StringEndsWith(string S, char C)
 	return(Result);
 }
 
+internal string
+StringFromRange(u8 *First, u8 *Last)
+{
+	string Result = {First, (u64)(Last - First)};
+	return(Result);
+}
+
+internal string
+String(u8 *Cstr)
+{
+	u8 *C = Cstr;
+	for(; *C; ++C);
+	string Result = StringFromRange(Cstr, C);
+
+	return(Result);
+}
+
 internal void
 ParseF32Array(f32 *Dest, u32 DestCount, string Data)
 {
@@ -716,22 +733,7 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 	}
 }
 
-internal string
-StringFromRange(u8 *First, u8 *Last)
-{
-	string Result = {First, (u64)(Last - First)};
-	return(Result);
-}
 
-internal string
-String(u8 *Cstr)
-{
-	u8 *C = Cstr;
-	for(; *C; ++C);
-	string Result = StringFromRange(Cstr, C);
-
-	return(Result);
-}
 
 internal xml_node *
 ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
