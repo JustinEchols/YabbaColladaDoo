@@ -15,6 +15,14 @@
 
  The parsing is done in ParseS32Array.
 
+// NOTE(Justin): Tags either have/do not have an ID.
+// Tags without IDs essentially tell us that we have
+// reached a part of the file containing a new bucket of
+// information, so we can just return the node. OTOH if
+// a tag has an ID then we are in a bucket that contains
+// specific information and we use the ID to ensure we are
+// at the node that contains the info. we are looking for.
+
  TODO(Justin):
  [] Change children array from fixed size to allocate on demand
  [] Clean up logic
@@ -29,6 +37,9 @@
  [] For models we know we only need to read do we parse the entire file?
  [] Better buffering of text (strtok)
  [] Rename ParseS32Array
+ [] Get list of xml nodes?
+ [] Init a mesh with one tree traversal
+ [] Parse normals and uvs such that theya are in a 1-1 correspondence with the vertex indices
 
 */
 
@@ -467,10 +478,13 @@ internal b32
 SubStringExists(char *HayStack, char *Needle)
 {
 	b32 Result = false;
-	char *S = strstr(HayStack, Needle);
-	if(S)
+	if(HayStack && Needle)
 	{
-		Result = true;
+		char *S = strstr(HayStack, Needle);
+		if(S)
+		{
+			Result = true;
+		}
 	}
 
 	return(Result);
@@ -528,14 +542,15 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Data)
 	}
 }
 
+#if 1
 internal void
-ParseS32Array(u32 *Dest, u32 DestCount, string Data)
+ParseS32Array(u32 *Dest, u32 DestCount, string Data, u32 Offset, u32 Stride)
 {
 	char Delimeter[] = " ";
 	char *Token;
 
 	u32 TokenCount = 0;
-	Token = strtok((char *)Data.Data, Delimeter);
+	Token = strtok((char *)(Data.Data + Offset), Delimeter);
 
 	u32 Index = 0;
 	Dest[Index++] = (u32)atoi(Token);
@@ -544,7 +559,7 @@ ParseS32Array(u32 *Dest, u32 DestCount, string Data)
 	{
 		Token = strtok(0, Delimeter);
 		TokenCount++;
-		if(TokenCount == 3)
+		if(TokenCount == Stride)
 		{
 			Dest[Index++] = (u32)atoi(Token);
 			TokenCount = 0;
@@ -555,6 +570,51 @@ ParseS32Array(u32 *Dest, u32 DestCount, string Data)
 			}
 		}
 	}
+}
+#endif
+
+#if 0
+internal void
+ParseS32Array(u32 *Dest, u32 DestCount, string Src)
+{
+	char Delimeter[] = " ";
+	char *Token;
+
+	Token = strtok((char *)(Src.Data), Delimeter);
+
+	u32 Index = 0;
+	Dest[Index++] = (u32)atoi(Token);
+	while(Token)
+	{
+		Token = strtok(0, Delimeter);
+		Dest[Index++] = (u32)atoi(Token);
+			
+		if(Index == (DestCount))
+		{
+			break;
+		}
+	}
+}
+#endif
+
+internal void
+ParseNormals(f32 *Dest, u32 DestCount, u32 *Indices, u32 IndicesCount)
+{
+	f32 *Temp = (f32 *)calloc(DestCount, sizeof(u32));
+	u32 TempIndex = 0;
+	for(u32 Index = 1; Index < IndicesCount; Index +=3)
+	{
+		u32 NormalIndex = Indices[Index];
+		Temp[TempIndex] = Dest[NormalIndex];
+		Temp[TempIndex + 1] = Dest[NormalIndex + 1];
+		Temp[TempIndex + 2] = Dest[NormalIndex + 2];
+		TempIndex += 3;
+	}
+
+	memcpy(Dest, Temp, DestCount);
+	free(Temp);
+
+
 }
 
 internal s32
@@ -686,12 +746,12 @@ MeshInit(xml_node *Root, mesh *Mesh)
 }
 #endif
 
+// NOTE(Justin): Check for correctness
 internal void
 NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 {
 	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
 	{
-		// NOTE(Justin): If the tag size is 0 the node has not been found yet, continue searching OW break.
 		if(N->Tag.Size == 0)
 		{
 			xml_node *Node = Root->Children[Index];
@@ -699,15 +759,6 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 			{
 				if(StringsAreSame(Node->Tag, TagName))
 				{
-
-					// NOTE(Justin): Tags either have/do not have an ID.
-					// Tags without IDs essentially tell us that we have
-					// reached a part of the file containing a new bucket of
-					// information, so we can just return the node. OTOH if
-					// a tag has an ID then we are in a bucket that contains
-					// specific information and we use the ID to ensure we are
-					// at the node that contains the info. we are looking for.
-
 					if(ID)
 					{
 						if(SubStringExists(Node->Attributes->Value, ID))
@@ -722,6 +773,7 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 				}
 				else if(*Node->Children)
 				{
+					// NOTE(Justin): Check for correctness
 					NodeGet(Node, N, TagName, ID);
 				}
 			}
@@ -733,7 +785,43 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 	}
 }
 
-
+internal void
+NodeGet2(xml_node *Root, xml_node *N, char *ParentName, char *ID = 0)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		if(N->Tag.Size == 0)
+		{
+			xml_node *Node = Root->Children[Index];
+			if(Node)
+			{
+				if(StringsAreSame(Node->Parent->Tag, ParentName))
+				{
+					if(ID)
+					{
+						if(StringsAreSame(Node->Attributes->Value, ID))
+						{
+							*N = *Node;
+						}
+					}
+					else
+					{
+						*N = *Node;
+					}
+				}
+				else if(*Node->Children)
+				{
+					// NOTE(Justin): Check for correctness
+					NodeGet2(Node, N, ParentName, ID);
+				}
+			}
+		}
+		else
+		{
+			break;
+		}
+	}
+}
 
 internal xml_node *
 ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
@@ -767,18 +855,9 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		Content[Size] = '\0';
 		fclose(FileHandle);
 
-		char TagStart = '<';
-		char TagEnd = '>';
-		//char ForwardSlash = '/';
-
-		// NOTE(Justin): Totally making up the size of the buffer.
-		char *Buffer = (char *)calloc(Size/2, sizeof(char));
+		char Buffer[512];
 		s32 InnerTextIndex = 0;
 		s32 Index = 0;
-
-		Result.Root = PushXMLNode(Arena, 0);
-		xml_node *CurrentNode = Result.Root;
-
 		while(!SubStringExists(Buffer, "COLLADA"))
 		{	
 			Buffer[InnerTextIndex++] = Content[Index++];
@@ -788,29 +867,30 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		InnerTextIndex = 0;
 		Index -= ((s32)strlen("<COLLADA") + 1);
 
-#if 0
 		char TagDelimeters[] = "<>";
-		string Token = String((u8 *)strtok((char *)(Content + Index), TagDelimeters));
+		char InnerTagDelimeters[] = " =";
+
+		char *Context1 = 0;
+		char *Context2 = 0;
+
+		string Token = String((u8 *)strtok_s((char *)(Content + Index), TagDelimeters, &Context1));
+		Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+
+		Result.Root = PushXMLNode(Arena, 0);
+		xml_node *CurrentNode = Result.Root;
+
+		CurrentNode->Tag = Token;
+		Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+		CurrentNode->InnerText = Token;
 		while(Token.Data)
 		{
-			Token = String((u8 *)strtok(0, TagDelimeters));
-			if(SubStringExists(Token, " ") && !CurrentNode->Tag.Data)
-			{
-				CurrentNode->Tag = Token;
-			}
-			else if(SubStringExists(Token, " ") && CurrentNode->Tag.Data && !CurrentNode->InnerText.Data)
-			{
-				CurrentNode->InnerText = Token;
-			}
-			else if(SubStringExists(Token, "-") && !CurrentNode->InnerText.Data)
-			{
-				CurrentNode->InnerText = Token;
-			}
-			else if(Token.Data[0] == '/')
+			Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+			if(Token.Data[0] == '/')
 			{
 				if(CurrentNode->Parent)
 				{
 					CurrentNode = CurrentNode->Parent;
+					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 				}
 				else
 				{
@@ -819,157 +899,49 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			}
 			else
 			{
-				// NOTE(Justin): Child node
-
-				CurrentNode = ChildNodeAdd(Arena, CurrentNode);
-				CurrentNode->Tag = Token;
-			}
-
-		}
-#endif
-
-		while(Content[Index] != '\0')
-		{
-
-			if(!CurrentNode->Tag.Data)
-			{
-				Index++;
-				while(Content[Index] != TagEnd)
+#if 0
+				if(SubStringExists(Token, " "))
 				{
-					Buffer[InnerTextIndex++] = Content[Index++];
+					// TODO(Justin): Process tagname and key/value pair atrributes
+					string Temp = {};
 
-					if((Content[Index] == TagEnd))
+					Temp.Size = Token.Size;
+					Temp.Data = (u8 *)calloc(Temp.Size, sizeof(u8));
+					memcpy(Temp.Data, Token.Data, Token.Size);
+
+					char * TagToken = strtok_s((char *)Temp.Data, InnerTagDelimeters, &Context2);
+					CurrentNode->Tag = String((u8 *)TagToken);
+					TagToken = strtok_s(0, InnerTagDelimeters, &Context2);
+					while(TagToken)
 					{
-						Buffer[InnerTextIndex] = '\0';
-						CurrentNode->Tag.Data = (u8 *)strdup(Buffer);
-						CurrentNode->Tag.Size = InnerTextIndex;
-						InnerTextIndex = 0;
-					}
+						xml_attribute *Attr = CurrentNode->Attributes + CurrentNode->AttributeCount;
+						Attr->Key = String((u8 *)TagToken);
 
-					if(((Content[Index] == ' ') || (Content[Index + 1] == TagEnd)) && (!CurrentNode->Tag.Data))
-					{
-						// NOTE(Justin): Two types of tags. Tag with key/values
-						// and tags without key/values. So, need to handle both.
-						if(Content[Index] != ' ')
-						{
-							Buffer[InnerTextIndex++] = Content[Index];
-						}
+						TagToken = strtok_s(0, InnerTagDelimeters, &Context2);
+						Attr->Value = String((u8 *)TagToken);
 
-						Buffer[InnerTextIndex] = '\0';
-						CurrentNode->Tag.Data = (u8 *)strdup(Buffer);
-						CurrentNode->Tag.Size = InnerTextIndex;
-						InnerTextIndex = 0;
-						Index++;
-					}
-
-					if((Content[Index] == '='))
-					{
-						// NOTE(Justin): Buffered key so copy to current attribute
-						xml_attribute *Attribute = CurrentNode->Attributes + CurrentNode->AttributeCount;
-						Buffer[InnerTextIndex] = '\0';
-						Attribute->Key.Data = (u8 *)strdup(Buffer);
-						Attribute->Key.Size = InnerTextIndex;
-						InnerTextIndex = 0;
-						Index++;
-					}
-
-					if((Content[Index] == '"'))
-					{
-						// NOTE(Jusitn): At start of value, buffer & copy to current attribute
-						// and increment attribute count
-						Index++;
-						while(Content[Index] != '"')
-						{
-							Buffer[InnerTextIndex++] = Content[Index++];
-						}
-						Buffer[InnerTextIndex] = '\0';
-
-						xml_attribute *Attribute = CurrentNode->Attributes + CurrentNode->AttributeCount;
-						Assert(Attribute->Key.Data);
-						Attribute->Value.Data = (u8 *)strdup(Buffer);
-						Attribute->Value.Size = InnerTextIndex;
 						CurrentNode->AttributeCount++;
 						Assert(CurrentNode->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
 
-						InnerTextIndex = 0;
-						if(Content[Index + 1] == ' ')
+						if(TagToken)
 						{
-							// NOTE(Justin): Advance index to start buffering next key
-							Index += 2;
-						}
-						else
-						{
-							// NOTE(Justin): Advance index, next char is either '>' or '/'
-							Index++;
-						}
-
-						if(Content[Index] == '/')
-						{
-							// NOTE(Justin): Single tag node ("empty node") with no closing tag
-							Index++;
-							CurrentNode = CurrentNode->Parent;
+							//string TagStuff = String((u8 *)TagToken);
 						}
 					}
 				}
+#endif
 
-				// NOTE(Justin): Done processing tag. Buffer & copy inner text.
-				Index++;
-				InnerTextIndex = 0;
-				while(Content[Index] != TagStart)
-				{
-					Buffer[InnerTextIndex++] = Content[Index++];
-				}
-				Buffer[InnerTextIndex] = '\0';
-				CurrentNode->InnerText.Data = (u8 *)strdup(Buffer);
-				CurrentNode->InnerText.Size = InnerTextIndex;
-				InnerTextIndex = 0;
-			}
-			else
-			{
+				CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+				CurrentNode->Tag = Token;
+
+				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+				CurrentNode->InnerText = Token;
 				if(StringEndsWith(CurrentNode->Tag, '/'))
 				{
-					CurrentNode = CurrentNode->Parent;
-				}
-
-				if((Content[Index] == '<') && (Content[Index + 1] == '/'))
-				{
-					// NOTE(Justin): Closing tag and end of the current node. Advance the index to one past '>'.
-					Index += 2;
-					while(Content[Index] != '>')
-					{
-						Index++;
-					}
-					Index++;
-
-					if(CurrentNode->Parent)
-					{
-						CurrentNode = CurrentNode->Parent;
-					}
-					else
-					{
-						break;
-					}
-				}
-
-				else if(Content[Index] == '<')
-				{
-					// NOTE(Justin): Child node exists
-					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
-				}
-				else
-				{
-					// Note(Justin): At the end of a child node and another child node exists.
-					while(Content[Index] != TagStart)
-					{
-						Buffer[InnerTextIndex++] = Content[Index++];
-					}
-					Buffer[InnerTextIndex] = '\0';
-					InnerTextIndex = 0;
+					CurrentNode  = CurrentNode->Parent;
 				}
 			}
 		}
-
-		free(Buffer);
 	}
 
 	return(Result);
@@ -1012,6 +984,7 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 	xml_node *Root = DaeFile.Root;
 
+	// NOTE(Justin): Positions, normals, and UVs
 	xml_node Geometry;
 	xml_node NodePos;
 	xml_node NodeNormal;
@@ -1047,10 +1020,38 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
 	Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
 
-	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
+#if 0
+	u32 TotalCount = 3 * Mesh.IndicesCount;
+	u32 *Indices = (u32 *)calloc(TotalCount, sizeof(u32));
+	ParseS32Array(Indices, TotalCount, NodeIndex.InnerText);
+#endif
+
+
 	ParseF32Array(Mesh.Normals, Mesh.NormalsCount, NodeNormal.InnerText);
+	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
 	ParseF32Array(Mesh.UV, Mesh.UVCount, NodeUV.InnerText);
-	ParseS32Array(Mesh.Indices, Mesh.IndicesCount, NodeIndex.InnerText);
+	ParseS32Array(Mesh.Indices, Mesh.IndicesCount, NodeIndex.InnerText, 0, 3);
+
+
+#if 0
+	// NOTE(Justin): Rig 
+	xml_node InstanceController = {};
+
+
+	NodeGet(Root, &InstanceController, "instance_controller");
+	u8 *ID =  (u8 *)InstanceController.Children[0]->InnerText.Data + 1;
+	string SkeletonRootID = String(ID);
+
+	xml_node VisualScene = {};
+	xml_node Joints = {};
+	xml_node BindPoses = {};
+	xml_node Weights = {};
+
+	NodeGet(Root, &VisualScene, "library_visual_scenes");
+
+	xml_node SkeletonRoot = {};
+	NodeGet2(&VisualScene, &SkeletonRoot, "node", (char *)SkeletonRootID.Data);
+#endif
 
 	return(Mesh);
 }
