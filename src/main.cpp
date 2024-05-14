@@ -24,22 +24,19 @@
 // at the node that contains the info. we are looking for.
 
  TODO(Justin):
+ [] Clean up parsing and logic
+ [] Better buffering of text (strtok)
+ [] Remove crt functions
+ [] Init a mesh with one tree traversal
+ [] Parse normals and uvs such that theya are in a 1-1 correspondence with the vertex indices
  [] Change children array from fixed size to allocate on demand
- [] Clean up logic
- [] Clean up parsing
  [] Handle more complicated meshes
  [] Handle meshes with materials
  [] Init mesh using recursion so only have to traverse tree once? (bad idea??)
  [] Skeletal animation transforms
- [] Remove crt functions
  [] Write collada file
  [] Do we need dynamic buffer sizes?
  [] For models we know we only need to read do we parse the entire file?
- [] Better buffering of text (strtok)
- [] Rename ParseS32Array
- [] Get list of xml nodes?
- [] Init a mesh with one tree traversal
- [] Parse normals and uvs such that theya are in a 1-1 correspondence with the vertex indices
 
 */
 
@@ -542,7 +539,6 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Data)
 	}
 }
 
-#if 1
 internal void
 ParseS32Array(u32 *Dest, u32 DestCount, string Data, u32 Offset, u32 Stride)
 {
@@ -570,51 +566,6 @@ ParseS32Array(u32 *Dest, u32 DestCount, string Data, u32 Offset, u32 Stride)
 			}
 		}
 	}
-}
-#endif
-
-#if 0
-internal void
-ParseS32Array(u32 *Dest, u32 DestCount, string Src)
-{
-	char Delimeter[] = " ";
-	char *Token;
-
-	Token = strtok((char *)(Src.Data), Delimeter);
-
-	u32 Index = 0;
-	Dest[Index++] = (u32)atoi(Token);
-	while(Token)
-	{
-		Token = strtok(0, Delimeter);
-		Dest[Index++] = (u32)atoi(Token);
-			
-		if(Index == (DestCount))
-		{
-			break;
-		}
-	}
-}
-#endif
-
-internal void
-ParseNormals(f32 *Dest, u32 DestCount, u32 *Indices, u32 IndicesCount)
-{
-	f32 *Temp = (f32 *)calloc(DestCount, sizeof(u32));
-	u32 TempIndex = 0;
-	for(u32 Index = 1; Index < IndicesCount; Index +=3)
-	{
-		u32 NormalIndex = Indices[Index];
-		Temp[TempIndex] = Dest[NormalIndex];
-		Temp[TempIndex + 1] = Dest[NormalIndex + 1];
-		Temp[TempIndex + 2] = Dest[NormalIndex + 2];
-		TempIndex += 3;
-	}
-
-	memcpy(Dest, Temp, DestCount);
-	free(Temp);
-
-
 }
 
 internal s32
@@ -684,69 +635,7 @@ NodeAttributeGet(xml_node *Node, char *AttrName)
 	return(Result);
 }
 
-
-// NOTE(Justin): Something very bad is happening when parsing using this routine
-#if 0
-internal void 
-MeshInit(xml_node *Root, mesh *Mesh)
-{
-	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
-	{
-		xml_node *Node = Root->Children[Index];
-		if(Node)
-		{
-			if(StringsAreSame(Node->Tag, "float_array"))
-			{
-				if(SubStringExists(Node->Attributes->Value, "mesh-positions-array"))
-				{
-					xml_attribute Attr = NodeAttributeGet(Node, "count");
-
-					Mesh->PositionsCount = S32FromASCII(Attr.Value.Data);
-					Mesh->Positions = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
-					ParseF32Array(Mesh->Positions, Mesh->PositionsCount, Node->InnerText);
-				}
-				else if(SubStringExists(Node->Attributes->Value, "mesh-normals-array"))
-				{
-					xml_attribute Attr = NodeAttributeGet(Node, "count");
-
-					Mesh->NormalsCount = S32FromASCII(Attr.Value.Data);
-					Mesh->Normals = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
-					ParseF32Array(Mesh->Normals, Mesh->NormalsCount, Node->InnerText);
-				}
-				else if(SubStringExists(Node->Attributes->Value, "mesh-map-0-array"))
-				{
-					xml_attribute Attr = NodeAttributeGet(Node, "count");
-					Mesh->UVCount = S32FromASCII(Attr.Value.Data);
-					Mesh->UV = (f32 *)calloc(Mesh->PositionsCount, sizeof(f32));
-
-					ParseF32Array(Mesh->UV, Mesh->UVCount, Node->InnerText);
-				}
-			}
-
-			if(StringsAreSame(Node->Tag, "triangles"))
-			{
-				xml_attribute Attr = NodeAttributeGet(Node, "count");
-				Mesh->IndicesCount = 3 * 3 * S32FromASCII(Attr.Value.Data);
-				Mesh->Indices = (u32 *)calloc(Mesh->IndicesCount, sizeof(u32));
-			}
-
-			if(StringsAreSame(Node->Tag, "p"))
-			{
-				Assert(Mesh->IndicesCount > 0);
-				Assert(Mesh->Indices);
-				ParseS32Array(Mesh->Indices, Mesh->IndicesCount, Node->InnerText);
-			}
-
-			if(*Node->Children)
-			{
-				MeshInit(Node, Mesh);
-			}
-		}
-	}
-}
-#endif
-
-// NOTE(Justin): Check for correctness
+// TODO(Justin): Check for correctness
 internal void
 NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 {
@@ -773,7 +662,7 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 				}
 				else if(*Node->Children)
 				{
-					// NOTE(Justin): Check for correctness
+					// TODO(Justin): Check for correctness
 					NodeGet(Node, N, TagName, ID);
 				}
 			}
@@ -874,7 +763,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 		char TagDelimeters[] = "<>";
 		char InnerTagDelimeters[] = " =";
-		//char InnerTagDelimeters[] = " =\"";
 
 		char *Context1 = 0;
 		char *Context2 = 0;
@@ -906,24 +794,21 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			}
 			else
 			{
-				// NOTE(Justin): Node with keys/values but no text/children.
-				// Process keys/values and set current node to parent
+				CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
-					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+					// TODO(Justin): Fix blocker when processing key/value
+					// pairs. Currently cannot support processing a value that
+					// has a space in the value.
 
 					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
-
 					CurrentNode = CurrentNode->Parent;
 				}
-
-				// NOTE(Justin): Node has key/values and does not end with '/'
 				else if(NodeHasKeysValues(Token))
 				{
-					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
-
 					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
@@ -931,18 +816,13 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				}
 				else if(StringEndsWith(Token, '/'))
 				{
-					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
-
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
-
 					CurrentNode = CurrentNode->Parent;
 				}
 				else
 				{
-					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
-
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
