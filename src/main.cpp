@@ -848,6 +848,7 @@ NodeProcessKeysValues(xml_node *Node, string Token, char *TokenContext, char Del
 {
 	string Temp = {};
 
+	// TODO(Justin): Push a string here.
 	Temp.Size = Token.Size;
 	Temp.Data = (u8 *)calloc(Temp.Size, sizeof(u8));
 	memcpy(Temp.Data, Token.Data, Token.Size);
@@ -869,8 +870,6 @@ NodeProcessKeysValues(xml_node *Node, string Token, char *TokenContext, char Del
 
 		TagToken = strtok_s(0, Delimeters, &TokenContext);
 	}
-
-	//free(Temp.Data);
 }
 
 internal loaded_dae
@@ -919,6 +918,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		CurrentNode->Tag = Token;
 		Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 		CurrentNode->InnerText = Token;
+
 		while(Token.Data)
 		{
 			Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
@@ -941,12 +941,12 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				// Process keys/values set current node to parent
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
-					// TODO(Justin): Process tagname and key/value pair atrributes
-
 					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+
 					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
+
 					CurrentNode = CurrentNode->Parent;
 				}
 
@@ -955,6 +955,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				else if(NodeHasKeysValues(Token))
 				{
 					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+
 					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
@@ -963,9 +964,11 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				else if(StringEndsWith(Token, '/'))
 				{
 					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
+
 					CurrentNode = CurrentNode->Parent;
 				}
 				else
@@ -977,13 +980,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					CurrentNode->InnerText = Token;
 
 				}
-
-#if 0
-				if(StringEndsWith(CurrentNode->Tag, '/'))
-				{
-					CurrentNode  = CurrentNode->Parent;
-				}
-#endif
 			}
 		}
 	}
