@@ -836,6 +836,43 @@ ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
 	return(LastChild);
 }
 
+internal b32
+NodeHasKeysValues(string Str)
+{
+	b32 Result = SubStringExists(Str, " ");
+	return(Result);
+}
+
+internal void
+NodeProcessKeysValues(xml_node *Node, string Token, char *TokenContext, char Delimeters[])
+{
+	string Temp = {};
+
+	Temp.Size = Token.Size;
+	Temp.Data = (u8 *)calloc(Temp.Size, sizeof(u8));
+	memcpy(Temp.Data, Token.Data, Token.Size);
+
+	char * TagToken = strtok_s((char *)Temp.Data, Delimeters, &TokenContext);
+	Node->Tag = String((u8 *)TagToken);
+	TagToken = strtok_s(0, Delimeters, &TokenContext);
+
+	while(TagToken)
+	{
+		xml_attribute *Attr = Node->Attributes + Node->AttributeCount;
+		Attr->Key = String((u8 *)TagToken);
+
+		TagToken = strtok_s(0, Delimeters, &TokenContext);
+		Attr->Value = String((u8 *)(TagToken));
+
+		Node->AttributeCount++;
+		Assert(Node->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
+
+		TagToken = strtok_s(0, Delimeters, &TokenContext);
+	}
+
+	//free(Temp.Data);
+}
+
 internal loaded_dae
 ColladaFileLoad(memory_arena *Arena, char *FileName)
 {
@@ -899,47 +936,54 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			}
 			else
 			{
-#if 0
-				if(SubStringExists(Token, " "))
+
+				// NOTE(Justin): Node with keys/values but no text/children.
+				// Process keys/values set current node to parent
+				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
 					// TODO(Justin): Process tagname and key/value pair atrributes
-					string Temp = {};
 
-					Temp.Size = Token.Size;
-					Temp.Data = (u8 *)calloc(Temp.Size, sizeof(u8));
-					memcpy(Temp.Data, Token.Data, Token.Size);
-
-					char * TagToken = strtok_s((char *)Temp.Data, InnerTagDelimeters, &Context2);
-					CurrentNode->Tag = String((u8 *)TagToken);
-					TagToken = strtok_s(0, InnerTagDelimeters, &Context2);
-					while(TagToken)
-					{
-						xml_attribute *Attr = CurrentNode->Attributes + CurrentNode->AttributeCount;
-						Attr->Key = String((u8 *)TagToken);
-
-						TagToken = strtok_s(0, InnerTagDelimeters, &Context2);
-						Attr->Value = String((u8 *)TagToken);
-
-						CurrentNode->AttributeCount++;
-						Assert(CurrentNode->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
-
-						if(TagToken)
-						{
-							//string TagStuff = String((u8 *)TagToken);
-						}
-					}
+					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
+					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					CurrentNode->InnerText = Token;
+					CurrentNode = CurrentNode->Parent;
 				}
-#endif
 
-				CurrentNode = ChildNodeAdd(Arena, CurrentNode);
-				CurrentNode->Tag = Token;
+				// NOTE(Justin): Node has key/values and does not end with '/'
+				// node must have inner text. Node may/may not have a child
+				else if(NodeHasKeysValues(Token))
+				{
+					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
+					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					CurrentNode->InnerText = Token;
 
-				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-				CurrentNode->InnerText = Token;
+				}
+				else if(StringEndsWith(Token, '/'))
+				{
+					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+					CurrentNode->Tag = Token;
+					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					CurrentNode->InnerText = Token;
+					CurrentNode = CurrentNode->Parent;
+				}
+				else
+				{
+					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+
+					CurrentNode->Tag = Token;
+					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					CurrentNode->InnerText = Token;
+
+				}
+
+#if 0
 				if(StringEndsWith(CurrentNode->Tag, '/'))
 				{
 					CurrentNode  = CurrentNode->Parent;
 				}
+#endif
 			}
 		}
 	}
@@ -1004,16 +1048,16 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(&Geometry, &NodeIndex, "p");
 
 	xml_attribute AttrP = NodeAttributeGet(&NodePos, "count");
-	Mesh.PositionsCount = S32FromASCII(AttrP.Value.Data);
+	Mesh.PositionsCount = S32FromASCII(AttrP.Value.Data + 1);
 
 	xml_attribute AttrN = NodeAttributeGet(&NodeNormal, "count");
-	Mesh.NormalsCount = S32FromASCII(AttrN.Value.Data);
+	Mesh.NormalsCount = S32FromASCII(AttrN.Value.Data + 1);
 
 	xml_attribute AttrUV = NodeAttributeGet(&NodeUV, "count");
-	Mesh.UVCount = S32FromASCII(AttrUV.Value.Data);
+	Mesh.UVCount = S32FromASCII(AttrUV.Value.Data + 1);
 
 	xml_attribute AttrI = NodeAttributeGet(NodeIndex.Parent, "count");
-	Mesh.IndicesCount = 3 * S32FromASCII(AttrI.Value.Data);
+	Mesh.IndicesCount = 3 * S32FromASCII(AttrI.Value.Data + 1);
 
 	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
 	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
