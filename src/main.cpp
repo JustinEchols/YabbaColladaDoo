@@ -785,44 +785,6 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 	}
 }
 
-internal void
-NodeGet2(xml_node *Root, xml_node *N, char *ParentName, char *ID = 0)
-{
-	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
-	{
-		if(N->Tag.Size == 0)
-		{
-			xml_node *Node = Root->Children[Index];
-			if(Node)
-			{
-				if(StringsAreSame(Node->Parent->Tag, ParentName))
-				{
-					if(ID)
-					{
-						if(StringsAreSame(Node->Attributes->Value, ID))
-						{
-							*N = *Node;
-						}
-					}
-					else
-					{
-						*N = *Node;
-					}
-				}
-				else if(*Node->Children)
-				{
-					// NOTE(Justin): Check for correctness
-					NodeGet2(Node, N, ParentName, ID);
-				}
-			}
-		}
-		else
-		{
-			break;
-		}
-	}
-}
-
 internal xml_node *
 ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
 {
@@ -936,7 +898,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			}
 			else
 			{
-
 				// NOTE(Justin): Node with keys/values but no text/children.
 				// Process keys/values set current node to parent
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
@@ -1066,7 +1027,6 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	ParseS32Array(Indices, TotalCount, NodeIndex.InnerText);
 #endif
 
-
 	ParseF32Array(Mesh.Normals, Mesh.NormalsCount, NodeNormal.InnerText);
 	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
 	ParseF32Array(Mesh.UV, Mesh.UVCount, NodeUV.InnerText);
@@ -1075,10 +1035,10 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 #if 0
 	// NOTE(Justin): Rig 
+
 	xml_node InstanceController = {};
-
-
 	NodeGet(Root, &InstanceController, "instance_controller");
+
 	u8 *ID =  (u8 *)InstanceController.Children[0]->InnerText.Data + 1;
 	string SkeletonRootID = String(ID);
 
@@ -1090,7 +1050,6 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(Root, &VisualScene, "library_visual_scenes");
 
 	xml_node SkeletonRoot = {};
-	NodeGet2(&VisualScene, &SkeletonRoot, "node", (char *)SkeletonRootID.Data);
 #endif
 
 	return(Mesh);
