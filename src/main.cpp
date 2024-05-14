@@ -738,11 +738,9 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 	FILE *FileHandle = fopen(FileName, "r");
 	if(FileHandle)
 	{
-		// NOTE(Justin): Get the size of the file
 		fseek(FileHandle, 0, SEEK_END);
 		s32 Size = ftell(FileHandle);
 		fseek(FileHandle, 0, SEEK_SET);
-
 
 		u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
 		fread(Content, 1, Size, FileHandle);
