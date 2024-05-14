@@ -831,6 +831,13 @@ NodeProcessKeysValues(xml_node *Node, string Token, char *TokenContext, char Del
 		Assert(Node->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
 
 		TagToken = strtok_s(0, Delimeters, &TokenContext);
+		if(TagToken)
+		{
+			if(SubStringExists(TagToken, "/"))
+			{
+				break;
+			}
+		}
 	}
 }
 
@@ -867,6 +874,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 		char TagDelimeters[] = "<>";
 		char InnerTagDelimeters[] = " =";
+		//char InnerTagDelimeters[] = " =\"";
 
 		char *Context1 = 0;
 		char *Context2 = 0;
@@ -899,7 +907,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			else
 			{
 				// NOTE(Justin): Node with keys/values but no text/children.
-				// Process keys/values set current node to parent
+				// Process keys/values and set current node to parent
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
 					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
@@ -912,7 +920,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				}
 
 				// NOTE(Justin): Node has key/values and does not end with '/'
-				// node must have inner text. Node may/may not have a child
 				else if(NodeHasKeysValues(Token))
 				{
 					CurrentNode = ChildNodeAdd(Arena, CurrentNode);
