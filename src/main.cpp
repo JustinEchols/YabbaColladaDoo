@@ -744,18 +744,18 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *T
 {
 
 	char *TagToken = strtok_s((char *)Token.Data, Delimeters, &TokenContext);
-	string Key = String((u8 *)TagToken);
 
 	xml_attribute *Attr = Node->Attributes + Node->AttributeCount;
 
+	string Key = String((u8 *)TagToken);
 	Attr->Key.Size = Key.Size;
 	Attr->Key.Data = PushArray(Arena, Attr->Key.Size + 1, u8);
 	ArrayCopy(Attr->Key.Size, Key.Data, Attr->Key.Data);
 	Attr->Key.Data[Attr->Key.Size] = '\0';
 
 	TagToken = strtok_s(0, Delimeters, &TokenContext);
-	string Value = String((u8 *)TagToken);
 
+	string Value = String((u8 *)TagToken);
 	Attr->Value.Size = Value.Size;
 	Attr->Value.Data = PushArray(Arena, Attr->Value.Size + 1, u8);
 	ArrayCopy(Attr->Value.Size, Value.Data, Attr->Value.Data);
