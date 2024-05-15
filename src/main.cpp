@@ -496,27 +496,7 @@ StringEndsWith(string S, char C)
 }
 
 
-internal b32
-StringsAreSame(char *Str1, char *Str2)
-{
-	string S1 = String((u8 *)Str1);
-	string S2 = String((u8 *)Str2);
 
-	b32 Result = (S1.Size == S2.Size);
-	if(Result)
-	{
-		for(u64 Index = 0; Index < S1.Size; ++Index)
-		{
-			if(S1.Data[Index] != S2.Data[Index])
-			{
-				Result = false;
-				break;
-			}
-		}
-	}
-
-	return(Result);
-}
 
 internal b32
 StringsAreSame(string S1, string S2)
@@ -537,24 +517,24 @@ StringsAreSame(string S1, string S2)
 	return(Result);
 }
 
+internal b32
+StringsAreSame(char *Str1, char *Str2)
+{
+	string S1 = String((u8 *)Str1);
+	string S2 = String((u8 *)Str2);
+
+	b32 Result = StringsAreSame(S1, S2);
+
+	return(Result);
+}
+
 
 internal b32
 StringsAreSame(string S1, char *Str2)
 {
 	string S2 = String((u8 *)Str2);
 
-	b32 Result = (S1.Size == S2.Size);
-	if(Result)
-	{
-		for(u64 Index = 0; Index < S1.Size; ++Index)
-		{
-			if(S1.Data[Index] != S2.Data[Index])
-			{
-				Result = false;
-				break;
-			}
-		}
-	}
+	b32 Result = StringsAreSame(S1, S2);
 
 	return(Result);
 }
@@ -795,8 +775,7 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *T
 	{
 		Attr = Node->Attributes + Node->AttributeCount;
 
-		// NOTE(Justin): Every key after the first one has a space at the start.
-		// Ignore it.
+		// NOTE(Justin): Every key after the first one has a space at the start. Ignore it.
 		Key = String((u8 *)(TagToken + 1));
 		Attr->Key.Size = Key.Size;
 		Attr->Key.Data = PushArray(Arena, Attr->Key.Size + 1, u8);
@@ -891,6 +870,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
+					// TODO(Justin): Push string
 					string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
 
 					CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
@@ -913,11 +893,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				}
 				else if(NodeHasKeysValues(Token))
 				{
-					if(SubStringExists(Token, "triangles count"))
-					{
-						int y = 0;
-					}
-
+					// TODO(Justin): Push string
 					string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
 
 					CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
@@ -940,6 +916,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				}
 				else if(StringEndsWith(Token, '/'))
 				{
+					// TODO(Justin): Push string
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
@@ -947,6 +924,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				}
 				else
 				{
+					// TODO(Justin): Push string
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
