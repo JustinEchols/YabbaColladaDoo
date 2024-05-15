@@ -109,6 +109,17 @@ PushSize_(memory_arena *Arena, memory_index Size)
 	return(Result);
 }
 
+#define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
+internal void *
+MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
+{
+	u8 *Src = (u8 *)SrcInit;
+	u8 *Dest = (u8 *)DestInit;
+	while(Size--) {*Dest++ = *Src++;}
+
+	return(DestInit);
+}
+
 //
 // NOTE(Justin): Mesh & maths 
 //
@@ -457,17 +468,94 @@ struct string
 	u64 Size;
 };
 
-internal b32
-StringsAreSame(char *S1, char *S2)
+internal string
+StringFromRange(u8 *First, u8 *Last)
 {
-	b32 Result = (strcmp(S1, S2) == 0);
+	string Result = {First, (u64)(Last - First)};
+	return(Result);
+}
+
+internal string
+String(u8 *Cstr)
+{
+	u8 *C = Cstr;
+	for(; *C; ++C);
+
+	string Result = StringFromRange(Cstr, C);
+
 	return(Result);
 }
 
 internal b32
-StringsAreSame(string S1, char *S2)
+StringEndsWith(string S, char C)
 {
-	b32 Result = StringsAreSame((char *)S1.Data, S2);
+	u8 *Test = S.Data + (S.Size - 1);
+	b32 Result = (*Test == (u8 )C);
+
+	return(Result);
+}
+
+
+internal b32
+StringsAreSame(char *Str1, char *Str2)
+{
+	string S1 = String((u8 *)Str1);
+	string S2 = String((u8 *)Str2);
+
+	b32 Result = (S1.Size == S2.Size);
+	if(Result)
+	{
+		for(u64 Index = 0; Index < S1.Size; ++Index)
+		{
+			if(S1.Data[Index] != S2.Data[Index])
+			{
+				Result = false;
+				break;
+			}
+		}
+	}
+
+	return(Result);
+}
+
+internal b32
+StringsAreSame(string S1, string S2)
+{
+	b32 Result = (S1.Size == S2.Size);
+	if(Result)
+	{
+		for(u64 Index = 0; Index < S1.Size; ++Index)
+		{
+			if(S1.Data[Index] != S2.Data[Index])
+			{
+				Result = false;
+				break;
+			}
+		}
+	}
+
+	return(Result);
+}
+
+
+internal b32
+StringsAreSame(string S1, char *Str2)
+{
+	string S2 = String((u8 *)Str2);
+
+	b32 Result = (S1.Size == S2.Size);
+	if(Result)
+	{
+		for(u64 Index = 0; Index < S1.Size; ++Index)
+		{
+			if(S1.Data[Index] != S2.Data[Index])
+			{
+				Result = false;
+				break;
+			}
+		}
+	}
+
 	return(Result);
 }
 
@@ -494,31 +582,7 @@ SubStringExists(string HayStack, char *Needle)
 	return(Result);
 }
 
-internal b32
-StringEndsWith(string S, char C)
-{
-	u8 *Test = S.Data + (S.Size - 1);
-	b32 Result = (*Test == (u8 )C);
 
-	return(Result);
-}
-
-internal string
-StringFromRange(u8 *First, u8 *Last)
-{
-	string Result = {First, (u64)(Last - First)};
-	return(Result);
-}
-
-internal string
-String(u8 *Cstr)
-{
-	u8 *C = Cstr;
-	for(; *C; ++C);
-	string Result = StringFromRange(Cstr, C);
-
-	return(Result);
-}
 
 internal void
 ParseF32Array(f32 *Dest, u32 DestCount, string Data)
@@ -623,10 +687,11 @@ internal xml_attribute
 NodeAttributeGet(xml_node *Node, char *AttrName)
 {
 	xml_attribute Result = {};
+	string Name = String((u8 *)AttrName);
 	for(s32 Index = 0; Index < Node->AttributeCount; ++Index)
 	{
 		xml_attribute *Attr = Node->Attributes + Index;
-		if(StringsAreSame(Attr->Key, AttrName)) 
+		if(StringsAreSame(Attr->Key, Name)) 
 		{
 			Result = *Attr;
 		}
@@ -695,26 +760,56 @@ NodeHasKeysValues(string Str)
 }
 
 internal void
-NodeProcessKeysValues(xml_node *Node, string Token, char *TokenContext, char Delimeters[])
+NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *TokenContext, char Delimeters[])
 {
-	string Temp = {};
 
-	// TODO(Justin): Push a string here.
-	Temp.Size = Token.Size;
-	Temp.Data = (u8 *)calloc(Temp.Size, sizeof(u8));
-	memcpy(Temp.Data, Token.Data, Token.Size);
+	char *TagToken = strtok_s((char *)Token.Data, Delimeters, &TokenContext);
+	string Key = String((u8 *)TagToken);
 
-	char * TagToken = strtok_s((char *)Temp.Data, Delimeters, &TokenContext);
-	Node->Tag = String((u8 *)TagToken);
+	xml_attribute *Attr = Node->Attributes + Node->AttributeCount;
+
+	Attr->Key.Size = Key.Size;
+	Attr->Key.Data = PushArray(Arena, Attr->Key.Size + 1, u8);
+	ArrayCopy(Attr->Key.Size, Key.Data, Attr->Key.Data);
+	Attr->Key.Data[Attr->Key.Size] = '\0';
+
+	TagToken = strtok_s(0, Delimeters, &TokenContext);
+	string Value = String((u8 *)TagToken);
+
+	Attr->Value.Size = Value.Size;
+	Attr->Value.Data = PushArray(Arena, Attr->Value.Size + 1, u8);
+	ArrayCopy(Attr->Value.Size, Value.Data, Attr->Value.Data);
+	Attr->Key.Data[Attr->Key.Size] = '\0';
+
+	Node->AttributeCount++;
+
 	TagToken = strtok_s(0, Delimeters, &TokenContext);
 
-	while(TagToken)
+	// WARNING(Justin): One must be very cautious when using strtok. If the node
+	// only has one key/value pair then TagToken will be null after the above
+	// statement. Therefore trying to read it results in an access violation.
+	// The condition in the while works because the evaluation of TagToken is
+	// done first before strchr executes. This is not great and is in my opinion
+	// not very stable.
+	while(TagToken && !strchr(TagToken, '/'))
 	{
-		xml_attribute *Attr = Node->Attributes + Node->AttributeCount;
-		Attr->Key = String((u8 *)TagToken);
+		Attr = Node->Attributes + Node->AttributeCount;
+
+		// NOTE(Justin): Every key after the first one has a space at the start.
+		// Ignore it.
+		Key = String((u8 *)(TagToken + 1));
+		Attr->Key.Size = Key.Size;
+		Attr->Key.Data = PushArray(Arena, Attr->Key.Size + 1, u8);
+		ArrayCopy(Attr->Key.Size, Key.Data, Attr->Key.Data);
+		Attr->Key.Data[Attr->Key.Size] = '\0';
 
 		TagToken = strtok_s(0, Delimeters, &TokenContext);
-		Attr->Value = String((u8 *)(TagToken));
+
+		Value = String((u8 *)TagToken);
+		Attr->Value.Size = Value.Size;
+		Attr->Value.Data = PushArray(Arena, Attr->Value.Size + 1, u8);
+		ArrayCopy(Attr->Value.Size, Value.Data, Attr->Value.Data);
+		Attr->Key.Data[Attr->Key.Size] = '\0';
 
 		Node->AttributeCount++;
 		Assert(Node->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
@@ -760,7 +855,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		Index -= ((s32)strlen("<COLLADA") + 1);
 
 		char TagDelimeters[] = "<>";
-		char InnerTagDelimeters[] = " =";
+		char InnerTagDelimeters[] = "=\"";
 
 		char *Context1 = 0;
 		char *Context2 = 0;
@@ -796,18 +891,49 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
-					// TODO(Justin): Fix blocker when processing key/value
-					// pairs. Currently cannot support processing a value that
-					// has a space in the value.
+					string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
 
-					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
+					CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
+					CurrentNode->Tag.Data = PushArray(Arena, CurrentNode->Tag.Size + 1, u8);
+
+					ArrayCopy(CurrentNode->Tag.Size, Token.Data, CurrentNode->Tag.Data);
+					CurrentNode->Tag.Data[CurrentNode->Tag.Size] = '\0';
+
+					string Temp = {};
+					Temp.Size = AtSpace.Size - 1;
+					Temp.Data = PushArray(Arena, Temp.Size + 1, u8);
+					ArrayCopy(Temp.Size, (AtSpace.Data + 1), Temp.Data);
+					Temp.Data[Temp.Size] = '\0';
+
+					NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
+
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
 					CurrentNode = CurrentNode->Parent;
 				}
 				else if(NodeHasKeysValues(Token))
 				{
-					NodeProcessKeysValues(CurrentNode, Token, Context2, InnerTagDelimeters);
+					if(SubStringExists(Token, "triangles count"))
+					{
+						int y = 0;
+					}
+
+					string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
+
+					CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
+					CurrentNode->Tag.Data = PushArray(Arena, CurrentNode->Tag.Size + 1, u8);
+
+					ArrayCopy(CurrentNode->Tag.Size, Token.Data, CurrentNode->Tag.Data);
+					CurrentNode->Tag.Data[CurrentNode->Tag.Size] = '\0';
+
+					string Temp = {};
+					Temp.Size = AtSpace.Size - 1;
+					Temp.Data = PushArray(Arena, Temp.Size + 1, u8);
+					ArrayCopy(Temp.Size, (AtSpace.Data + 1), Temp.Data);
+					Temp.Data[Temp.Size] = '\0';
+
+					NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
+
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
 
@@ -890,16 +1016,16 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(&Geometry, &NodeIndex, "p");
 
 	xml_attribute AttrP = NodeAttributeGet(&NodePos, "count");
-	Mesh.PositionsCount = S32FromASCII(AttrP.Value.Data + 1);
+	Mesh.PositionsCount = S32FromASCII(AttrP.Value.Data);
 
 	xml_attribute AttrN = NodeAttributeGet(&NodeNormal, "count");
-	Mesh.NormalsCount = S32FromASCII(AttrN.Value.Data + 1);
+	Mesh.NormalsCount = S32FromASCII(AttrN.Value.Data);
 
 	xml_attribute AttrUV = NodeAttributeGet(&NodeUV, "count");
-	Mesh.UVCount = S32FromASCII(AttrUV.Value.Data + 1);
+	Mesh.UVCount = S32FromASCII(AttrUV.Value.Data);
 
 	xml_attribute AttrI = NodeAttributeGet(NodeIndex.Parent, "count");
-	Mesh.IndicesCount = 3 * S32FromASCII(AttrI.Value.Data + 1);
+	Mesh.IndicesCount = 3 * S32FromASCII(AttrI.Value.Data);
 
 	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
 	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
@@ -1024,7 +1150,7 @@ int main(int Argc, char **Argv)
 			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
 			if(glewInit() == GLEW_OK)
 			{
-				loaded_dae CubeDae = ColladaFileLoad(Arena, "cube.dae");
+				loaded_dae CubeDae = ColladaFileLoad(Arena, "thingamajig.dae");
 				mesh Cube = MeshInit(Arena, CubeDae);
 
 				mat4 ModelTransorm = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
