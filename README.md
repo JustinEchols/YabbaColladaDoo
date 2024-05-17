@@ -6,6 +6,7 @@ This project is no longer being actively worked on mainly due to how collada fil
 
 ## Dependencies
 GLFW
+
 GLEW
 
 ## Setup
