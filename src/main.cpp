@@ -12,7 +12,6 @@
  [] Handle meshes with materials
  [] Skeletal animation transforms
  [] Write collada file
- [] Do we need dynamic buffer sizes?
  [] For models we know we only need to read do we parse the entire file?
 
 */
