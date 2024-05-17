@@ -6,9 +6,13 @@ This project is no longer being actively worked on mainly due to how collada fil
 
 ## Setup
 \> git clone https://github.com/JustinEchols/YabbaColladaDoo.git
+
 \> cd YabbaColladaDoo
+
 \YabbaColladaDoo> misc\shell.bat
+
 \YabbaColladaDoo> cd src
+
 \YabbaColladaDoo> build.bat
 
 ## Run
