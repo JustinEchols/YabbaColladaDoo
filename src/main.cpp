@@ -1,38 +1,14 @@
 
 /*
 
- NOTE(Justin): The indices in a collada file look like
-
-	<p>i0 i1 i2 i3 i4...</p>
-
- and they are grouped (for cube.dae) as
-
-	P0 N0 UV0 P1 N1 UV1...
-
- thus the indices that we need to pass to glDrawElements is
-
-	P0 P1 P2 P3...
-
- The parsing is done in ParseS32Array.
-
-// NOTE(Justin): Tags either have/do not have an ID.
-// Tags without IDs essentially tell us that we have
-// reached a part of the file containing a new bucket of
-// information, so we can just return the node. OTOH if
-// a tag has an ID then we are in a bucket that contains
-// specific information and we use the ID to ensure we are
-// at the node that contains the info. we are looking for.
-
  TODO(Justin):
- [] Clean up parsing and logic
- [] Better buffering of text (strtok)
+ [] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
+ [] Better buffering of text using memory arenas
  [] Remove crt functions
  [] Init a mesh with one tree traversal
- [] Parse normals and uvs such that theya are in a 1-1 correspondence with the vertex indices
  [] Change children array from fixed size to allocate on demand
  [] Handle more complicated meshes
  [] Handle meshes with materials
- [] Init mesh using recursion so only have to traverse tree once? (bad idea??)
  [] Skeletal animation transforms
  [] Write collada file
  [] Do we need dynamic buffer sizes?
@@ -425,8 +401,6 @@ Mat4Camera(v3 P, v3 Target)
 	R = Mat4TransposeMat3(CameraFrame) * Translate;
 
 	return(R);
-
-
 }
 
 internal mat4
@@ -495,9 +469,6 @@ StringEndsWith(string S, char C)
 	return(Result);
 }
 
-
-
-
 internal b32
 StringsAreSame(string S1, string S2)
 {
@@ -527,7 +498,6 @@ StringsAreSame(char *Str1, char *Str2)
 
 	return(Result);
 }
-
 
 internal b32
 StringsAreSame(string S1, char *Str2)
@@ -562,61 +532,61 @@ SubStringExists(string HayStack, char *Needle)
 	return(Result);
 }
 
-
-
-internal void
-ParseF32Array(f32 *Dest, u32 DestCount, string Data)
-{
-	char *Scan = (char *)Data.Data;
-	for(u32 Index = 0; Index < DestCount; ++Index)
-	{
-		Dest[Index] = (f32)atof(Scan);
-		while(*Scan != ' ' && *(Scan + 1) != '\0')
-		{
-			Scan++;
-		}
-
-		if(*(Scan + 1) != '\0')
-		{
-			Scan++;
-		}
-	}
-}
-
-internal void
-ParseS32Array(u32 *Dest, u32 DestCount, string Data, u32 Offset, u32 Stride)
-{
-	char Delimeter[] = " ";
-	char *Token;
-
-	u32 TokenCount = 0;
-	Token = strtok((char *)(Data.Data + Offset), Delimeter);
-
-	u32 Index = 0;
-	Dest[Index++] = (u32)atoi(Token);
-
-	while(Token)
-	{
-		Token = strtok(0, Delimeter);
-		TokenCount++;
-		if(TokenCount == Stride)
-		{
-			Dest[Index++] = (u32)atoi(Token);
-			TokenCount = 0;
-			
-			if(Index == (DestCount))
-			{
-				break;
-			}
-		}
-	}
-}
-
-internal s32
+inline s32
 S32FromASCII(u8 *S)
 {
 	s32 Result = atoi((char *)S);
 	return(Result);
+}
+
+inline u32
+U32FromASCII(u8 *S)
+{
+	u32 Result = (u32 )atoi((char *)S);
+	return(Result);
+}
+
+inline f32
+F32FromASCII(u8 *S)
+{
+	f32 Result = (f32)atof((char *)S);
+	return(Result);
+}
+
+internal void
+ParseU32Array(u32 *Dest, u32 DestCount, string Str)
+{
+	Assert(Dest);
+
+	char *Context;
+	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+	Dest[0] = U32FromASCII((u8 *)Tok);
+	for(u32 Index = 1; Index < DestCount; ++Index)
+	{
+		Tok = strtok_s(0, " ", &Context);
+		if(Tok)
+		{
+			Dest[Index] = U32FromASCII((u8 *)Tok);
+		}
+	}
+}
+
+internal void
+ParseF32Array(f32 *Dest, u32 DestCount, string Str)
+{
+	Assert(Dest);
+
+	char *Context;
+	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+	Dest[0] = F32FromASCII((u8 *)Tok);
+	for(u32 Index = 1; Index < DestCount; ++Index)
+	{
+		Tok = strtok_s(0, " ", &Context);
+		if(Tok)
+		{
+			Dest[Index] = F32FromASCII((u8 *)Tok);
+		}
+	}
 }
 
 struct xml_attribute
@@ -974,18 +944,11 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 	xml_node *Root = DaeFile.Root;
 
-	// NOTE(Justin): Positions, normals, and UVs
-	xml_node Geometry;
-	xml_node NodePos;
-	xml_node NodeNormal;
-	xml_node NodeUV;
-	xml_node NodeIndex;
-
-	Geometry.Tag.Size = 0; 
-	NodePos.Tag.Size = 0;
-	NodeNormal.Tag.Size = 0;
-	NodeUV.Tag.Size = 0;
-	NodeIndex.Tag.Size = 0;
+	xml_node Geometry = {};
+	xml_node NodePos = {};
+	xml_node NodeNormal = {};
+	xml_node NodeUV = {};
+	xml_node NodeIndex = {};
 
 	NodeGet(Root, &Geometry, "library_geometries");
 	NodeGet(&Geometry, &NodePos, "float_array", "mesh-positions-array");
@@ -994,52 +957,33 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(&Geometry, &NodeIndex, "p");
 
 	xml_attribute AttrP = NodeAttributeGet(&NodePos, "count");
-	Mesh.PositionsCount = S32FromASCII(AttrP.Value.Data);
-
-	xml_attribute AttrN = NodeAttributeGet(&NodeNormal, "count");
-	Mesh.NormalsCount = S32FromASCII(AttrN.Value.Data);
-
-	xml_attribute AttrUV = NodeAttributeGet(&NodeUV, "count");
-	Mesh.UVCount = S32FromASCII(AttrUV.Value.Data);
-
 	xml_attribute AttrI = NodeAttributeGet(NodeIndex.Parent, "count");
-	Mesh.IndicesCount = 3 * S32FromASCII(AttrI.Value.Data);
+
+	Mesh.PositionsCount = U32FromASCII(AttrP.Value.Data);
+	Mesh.IndicesCount = 3 * U32FromASCII(AttrI.Value.Data);
 
 	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
-	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
-	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
 	Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
 
-#if 0
-	u32 TotalCount = 3 * Mesh.IndicesCount;
-	u32 *Indices = (u32 *)calloc(TotalCount, sizeof(u32));
-	ParseS32Array(Indices, TotalCount, NodeIndex.InnerText);
-#endif
 
-	ParseF32Array(Mesh.Normals, Mesh.NormalsCount, NodeNormal.InnerText);
 	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
-	ParseF32Array(Mesh.UV, Mesh.UVCount, NodeUV.InnerText);
-	ParseS32Array(Mesh.Indices, Mesh.IndicesCount, NodeIndex.InnerText, 0, 3);
 
 
-#if 0
-	// NOTE(Justin): Rig 
+	char *Context;
+	char *TokI = strtok_s((char *)NodeIndex.InnerText.Data, " ", &Context);
 
-	xml_node InstanceController = {};
-	NodeGet(Root, &InstanceController, "instance_controller");
-
-	u8 *ID =  (u8 *)InstanceController.Children[0]->InnerText.Data + 1;
-	string SkeletonRootID = String(ID);
-
-	xml_node VisualScene = {};
-	xml_node Joints = {};
-	xml_node BindPoses = {};
-	xml_node Weights = {};
-
-	NodeGet(Root, &VisualScene, "library_visual_scenes");
-
-	xml_node SkeletonRoot = {};
-#endif
+	u32 Index = 0;
+	Mesh.Indices[Index++] = U32FromASCII((u8 *)TokI);
+	while(TokI)
+	{
+		TokI = strtok_s(0, " ", &Context);
+		TokI = strtok_s(0, " ", &Context);
+		TokI = strtok_s(0, " ", &Context);
+		if(TokI)
+		{
+			Mesh.Indices[Index++] = U32FromASCII((u8 *)TokI);
+		}
+	}
 
 	return(Mesh);
 }
@@ -1128,7 +1072,8 @@ int main(int Argc, char **Argv)
 			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
 			if(glewInit() == GLEW_OK)
 			{
-				loaded_dae CubeDae = ColladaFileLoad(Arena, "thingamajig.dae");
+				loaded_dae CubeDae = ColladaFileLoad(Arena, "cube.dae");
+
 				mesh Cube = MeshInit(Arena, CubeDae);
 
 				mat4 ModelTransorm = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
@@ -1141,7 +1086,6 @@ int main(int Argc, char **Argv)
 				f32 Aspect = (f32)Window.Width / (f32)Window.Height;
 				f32 ZNear = 0.1f;
 				f32 ZFar = 100.0f;
-
 				mat4 PerspectiveTransform = Mat4Perspective(FOV, Aspect, ZNear, ZFar);
 
 				mat4 MVP = PerspectiveTransform *
