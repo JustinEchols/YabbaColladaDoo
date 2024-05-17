@@ -434,7 +434,7 @@ struct mesh
 };
 
 //
-// NOTE(Justin): DAE/XML 
+// NOTE(Justin): Strings
 //
 
 struct string
@@ -589,6 +589,10 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Str)
 		}
 	}
 }
+
+//
+// NOTE(Justin): DAE/XML 
+//
 
 struct xml_attribute
 {
@@ -859,6 +863,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
 
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					// TODO(Justin): Push string
 					CurrentNode->InnerText = Token;
 					CurrentNode = CurrentNode->Parent;
 				}
@@ -882,6 +887,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
 
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					// TODO(Justin): Push string
 					CurrentNode->InnerText = Token;
 
 				}
@@ -898,6 +904,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					// TODO(Justin): Push string
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+					// TODO(Justin): Push string
 					CurrentNode->InnerText = Token;
 
 				}
@@ -973,6 +980,10 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	char *Context;
 	char *TokI = strtok_s((char *)NodeIndex.InnerText.Data, " ", &Context);
 
+	// NOTE(Justin): Unfortunately collada indices are not in a 1-1
+	// correspondence between positions, normals, and uvs. A map function could
+	// be used to convert the three indices into a unique index so that
+	// glDrawElements could be used...
 	u32 Index = 0;
 	Mesh.Indices[Index++] = U32FromASCII((u8 *)TokI);
 	while(TokI)
