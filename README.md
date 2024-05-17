@@ -13,7 +13,7 @@ This project is no longer being actively worked on mainly due to how collada fil
 
 \YabbaColladaDoo> cd src
 
-\YabbaColladaDoo> build.bat
+\YabbaColladaDoo\src> build.bat
 
 ## Run
-\YabbaColladaDoo\src\ ..\build\main.exe
+\YabbaColladaDoo\src> ..\build\main.exe
