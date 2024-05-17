@@ -2,6 +2,7 @@
 /*
 
  TODO(Justin):
+ [] WARNING using String() on a token is bad and can easily result in an access violation.
  [] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
  [] Better buffering of text using memory arenas
  [] Remove crt functions
