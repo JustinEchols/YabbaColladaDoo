@@ -1072,7 +1072,7 @@ int main(int Argc, char **Argv)
 			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
 			if(glewInit() == GLEW_OK)
 			{
-				loaded_dae CubeDae = ColladaFileLoad(Arena, "cube.dae");
+				loaded_dae CubeDae = ColladaFileLoad(Arena, "..\\data\\cube.dae");
 
 				mesh Cube = MeshInit(Arena, CubeDae);
 
