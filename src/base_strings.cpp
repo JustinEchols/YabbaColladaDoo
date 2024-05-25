@@ -145,3 +145,41 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Str)
 		}
 	}
 }
+
+internal string
+StringAllocAndCopyFromCstr(memory_arena *Arena, char *Cstr)
+{
+	Assert(Cstr);
+
+	string Result = {};
+	string Temp = String((u8 *)Cstr);
+
+	Result.Size = Temp.Size;
+	Result.Data = PushArray(Arena, Result.Size + 1, u8);
+	ArrayCopy(Result.Size, Temp.Data, Result.Data);
+	Result.Data[Result.Size] = '\0';
+
+	return(Result);
+}
+
+// NOTE(Justin): This relies on the fact that the strings are separated by spaces ' '
+// Is this parse sentence?
+internal void
+ParseStringArray(memory_arena *Arena, string *Dest, u32 DestCount, string Str)
+{
+	char *Context;
+	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+
+	u32 Index = 0;
+	Dest[Index++] = StringAllocAndCopyFromCstr(Arena, Tok);
+
+	while(Tok)
+	{
+		Tok = strtok_s(0, " ", &Context);
+		if(Tok)
+		{
+			Dest[Index++] = StringAllocAndCopyFromCstr(Arena, Tok);
+		}
+
+	}
+}
