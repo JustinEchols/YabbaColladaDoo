@@ -4,6 +4,7 @@
  TODO(Justin):
  [] WARNING using String() on a token is bad and can easily result in an access violation.
  [] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
+		- Confirm using Phong Shading
  [] Better buffering of text using memory arenas
  [] Remove crt functions
  [] Init a mesh with one tree traversal
@@ -727,6 +728,22 @@ NodeHasKeysValues(string Str)
 	return(Result);
 }
 
+internal string
+StringAllocAndCopyFromCstr(memory_arena *Arena, char *Cstr)
+{
+	string Result = {};
+
+	Assert(Cstr);
+	string Temp = String((u8 *)Cstr);
+
+	Result.Size = Temp.Size;
+	Result.Data = PushArray(Arena, Result.Size + 1, u8);
+	ArrayCopy(Result.Size, Temp.Data, Result.Data);
+	Result.Data[Result.Size] = '\0';
+
+	return(Result);
+}
+
 internal void
 NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *TokenContext, char Delimeters[])
 {
@@ -734,20 +751,10 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *T
 	char *TagToken = strtok_s((char *)Token.Data, Delimeters, &TokenContext);
 
 	xml_attribute *Attr = Node->Attributes + Node->AttributeCount;
-
-	string Key = String((u8 *)TagToken);
-	Attr->Key.Size = Key.Size;
-	Attr->Key.Data = PushArray(Arena, Attr->Key.Size + 1, u8);
-	ArrayCopy(Attr->Key.Size, Key.Data, Attr->Key.Data);
-	Attr->Key.Data[Attr->Key.Size] = '\0';
+	Attr->Key = StringAllocAndCopyFromCstr(Arena, TagToken);
 
 	TagToken = strtok_s(0, Delimeters, &TokenContext);
-
-	string Value = String((u8 *)TagToken);
-	Attr->Value.Size = Value.Size;
-	Attr->Value.Data = PushArray(Arena, Attr->Value.Size + 1, u8);
-	ArrayCopy(Attr->Value.Size, Value.Data, Attr->Value.Data);
-	Attr->Key.Data[Attr->Key.Size] = '\0';
+	Attr->Value = StringAllocAndCopyFromCstr(Arena, TagToken);
 
 	Node->AttributeCount++;
 
@@ -764,19 +771,12 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *T
 		Attr = Node->Attributes + Node->AttributeCount;
 
 		// NOTE(Justin): Every key after the first one has a space at the start. Ignore it.
-		Key = String((u8 *)(TagToken + 1));
-		Attr->Key.Size = Key.Size;
-		Attr->Key.Data = PushArray(Arena, Attr->Key.Size + 1, u8);
-		ArrayCopy(Attr->Key.Size, Key.Data, Attr->Key.Data);
-		Attr->Key.Data[Attr->Key.Size] = '\0';
+		//string Key = String((u8 *)(TagToken + 1));
+		Attr->Key = StringAllocAndCopyFromCstr(Arena, (TagToken + 1));
 
 		TagToken = strtok_s(0, Delimeters, &TokenContext);
 
-		Value = String((u8 *)TagToken);
-		Attr->Value.Size = Value.Size;
-		Attr->Value.Data = PushArray(Arena, Attr->Value.Size + 1, u8);
-		ArrayCopy(Attr->Value.Size, Value.Data, Attr->Value.Data);
-		Attr->Key.Data[Attr->Key.Size] = '\0';
+		Attr->Value = StringAllocAndCopyFromCstr(Arena, TagToken);
 
 		Node->AttributeCount++;
 		Assert(Node->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
@@ -792,6 +792,7 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *T
 	}
 }
 
+// TODO(Justin): The collada data can be temporary memory?
 internal loaded_dae
 ColladaFileLoad(memory_arena *Arena, char *FileName)
 {
@@ -858,7 +859,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 				if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
 				{
-					// TODO(Justin): Push string
 					string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
 
 					CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
@@ -876,13 +876,11 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
 
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-					// TODO(Justin): Push string
 					CurrentNode->InnerText = Token;
 					CurrentNode = CurrentNode->Parent;
 				}
 				else if(NodeHasKeysValues(Token))
 				{
-					// TODO(Justin): Push string
 					string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
 
 					CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
@@ -900,13 +898,11 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
 
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-					// TODO(Justin): Push string
 					CurrentNode->InnerText = Token;
 
 				}
 				else if(StringEndsWith(Token, '/'))
 				{
-					// TODO(Justin): Push string
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 					CurrentNode->InnerText = Token;
@@ -914,10 +910,8 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				}
 				else
 				{
-					// TODO(Justin): Push string
 					CurrentNode->Tag = Token;
 					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-					// TODO(Justin): Push string
 					CurrentNode->InnerText = Token;
 
 				}
