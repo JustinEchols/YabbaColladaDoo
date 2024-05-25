@@ -2,19 +2,20 @@
 /*
 
  TODO(Justin):
- [] WARNING using String() on a token is bad and can easily result in an access violation.
+ [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
 		- Confirm using Phong Shading
  [] Better buffering of text using memory arenas
  [] Remove crt functions
  [] Init a mesh with one tree traversal
  [] Change children array from fixed size to allocate on demand
+		- Sparse hash table?
+		- Dynamic list/array
+		- Is there a way to a priori determine the size (then can allocate)?
  [] Handle more complicated meshes
  [] Handle meshes with materials
  [] Skeletal animation transforms
- [] Write collada file
- [] Convert model data to binary format
- [] For models we know we only need to read do we parse the entire file?
+ [] Convert model data to simple format
 
 */
 
@@ -130,10 +131,6 @@ struct mesh
 
 };
 
-//
-// NOTE(Justin): Strings
-//
-
 internal s32
 FileSizeGet(FILE *OpenedFile)
 {
@@ -176,7 +173,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			FileReadEntireAndNullTerminate(Content, Size, FileHandle);
 			if(FileClose(FileHandle))
 			{
-
 				char Buffer[512];
 				s32 InnerTextIndex = 0;
 				s32 Index = 0;
@@ -390,7 +386,8 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 		}
 	}
 
-	// TODO(Justin): Free or figure out a way to not have to do it this way.
+	// TODO(Justin): Free or figure out a way to not have to do it this way, or
+	// use temporary memory.
 	u32 PositionCount = Mesh.PositionsCount;
 	f32 *Positions = PushArray(Arena, Mesh.PositionsCount, f32);
 	ParseF32Array(Positions, PositionCount, NodePos.InnerText);
