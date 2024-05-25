@@ -91,22 +91,6 @@ NodeHasKeysValues(string Str)
 	return(Result);
 }
 
-internal string
-StringAllocAndCopyFromCstr(memory_arena *Arena, char *Cstr)
-{
-	string Result = {};
-
-	Assert(Cstr);
-	string Temp = String((u8 *)Cstr);
-
-	Result.Size = Temp.Size;
-	Result.Data = PushArray(Arena, Result.Size + 1, u8);
-	ArrayCopy(Result.Size, Temp.Data, Result.Data);
-	Result.Data[Result.Size] = '\0';
-
-	return(Result);
-}
-
 internal void
 NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *TokenContext, char Delimeters[])
 {
@@ -154,3 +138,34 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *T
 		}
 	}
 }
+
+internal void
+ParseXMLFloatArray(memory_arena *Arena, xml_node *Root, f32 **Dest, u32 *DestCount, char *FloatArrayName)
+{
+	xml_node TargetNode = {};
+	NodeGet(Root, &TargetNode, "float_array", FloatArrayName);
+
+	xml_attribute AttrCount = NodeAttributeGet(&TargetNode, "count");
+
+	*DestCount = U32FromASCII(AttrCount.Value.Data);
+	*Dest = PushArray(Arena, *DestCount, f32);
+
+	ParseF32Array(*Dest, *DestCount, TargetNode.InnerText);
+}
+
+
+// TODO(Justin): Is Name_array the only xml string array in collada files?
+internal void
+ParseXMLStringArray(memory_arena *Arena, xml_node *Root, string **Dest, u32 *DestCount, char *StringArrayName)
+{
+	xml_node TargetNode = {};
+	NodeGet(Root, &TargetNode, "Name_array", StringArrayName);
+
+	xml_attribute AttrCount = NodeAttributeGet(&TargetNode, "count");
+
+	*DestCount  = U32FromASCII(AttrCount.Value.Data);
+	*Dest = PushArray(Arena, *DestCount, string);
+
+	ParseStringArray(Arena, *Dest, *DestCount, TargetNode.InnerText);
+}
+
