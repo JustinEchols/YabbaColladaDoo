@@ -2,9 +2,7 @@
 An example of loading a collada file that could be used as a starting point.
 
 ## Dependencies
-GLFW
-
-GLEW
+The two dependencies are GLFW and GLEW but only for rendering tests after the data from the collada file has been loaded.
 
 ## Setup
 \> git clone https://github.com/JustinEchols/YabbaColladaDoo.git
