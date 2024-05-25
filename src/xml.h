@@ -24,7 +24,7 @@ struct xml_node
 
 struct loaded_dae 
 {
-	char *FullPath;
+	string FullPath;
 	xml_node *Root;
 };
 
