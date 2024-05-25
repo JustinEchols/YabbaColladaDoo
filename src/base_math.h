@@ -1,5 +1,14 @@
 #if !defined(BASE_MATH_H)
 
+union v2
+{
+	struct
+	{
+		f32 x, y;
+	};
+	f32 E[2];
+};
+
 union v3
 {
 	struct
@@ -34,6 +43,17 @@ struct mat4
 {
 	f32 E[4][4];
 };
+
+inline v2
+V2(f32 X, f32 Y)
+{
+	v2 Result = {};
+
+	Result.x = X;
+	Result.y = Y;
+
+	return(Result);
+}
 
 inline v3
 V3(f32 X, f32 Y, f32 Z)
