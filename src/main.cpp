@@ -420,17 +420,6 @@ Mat4Perspective(f32 FOV, f32 AspectRatio, f32 ZNear, f32 ZFar)
 	return(R);
 }
 
-// TODO(Justin): Should we store the component count per triangle?
-struct triangle_list
-{
-	f32 *XYZ;
-	f32 *NxNyNz;
-	f32 *UV;
-
-	u32 *Indices;
-	u32 IndicesCount;
-};
-
 struct mesh
 {
 	u32 PositionsCount;
