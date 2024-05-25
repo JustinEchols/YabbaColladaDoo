@@ -419,17 +419,31 @@ Mat4Perspective(f32 FOV, f32 AspectRatio, f32 ZNear, f32 ZFar)
 	return(R);
 }
 
+// TODO(Justin): Should we store the component count per triangle?
+struct triangle_list
+{
+	f32 *XYZ;
+	f32 *NxNyNz;
+	f32 *UV;
+
+	u32 *Indices;
+	u32 IndicesCount;
+};
+
 struct mesh
 {
-	f32 *Positions;
-	f32 *Normals;
-	f32 *UV;
-	u32 *Indices;
-
 	u32 PositionsCount;
+	f32 *Positions;
+
 	u32 NormalsCount;
+	f32 *Normals;
+
 	u32 UVCount;
+	f32 *UV;
+
+	u32 *Indices;
 	u32 IndicesCount;
+
 };
 
 //
@@ -944,6 +958,7 @@ GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei 
 }
 
 // TODO(Justin): Traverse the tree once.
+// TODO(Justin): Temporary memory.
 internal mesh
 MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 {
@@ -964,35 +979,107 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(&Geometry, &NodeIndex, "p");
 
 	xml_attribute AttrP = NodeAttributeGet(&NodePos, "count");
+	xml_attribute AttrN = NodeAttributeGet(&NodeNormal, "count");
+	xml_attribute AttrUV = NodeAttributeGet(&NodeUV, "count");
 	xml_attribute AttrI = NodeAttributeGet(NodeIndex.Parent, "count");
 
+	// NOTE(Justin): Init mesh positions.
 	Mesh.PositionsCount = U32FromASCII(AttrP.Value.Data);
-	Mesh.IndicesCount = 3 * U32FromASCII(AttrI.Value.Data);
-
 	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
+
+	Mesh.NormalsCount = Mesh.PositionsCount;
+	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
+
+	Mesh.UVCount = 2 * (Mesh.PositionsCount / 3);
+	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
+
+	// NOTE(Jusitn): # indices = indices/per triangle * # triangles
+	Mesh.IndicesCount = 3 * U32FromASCII(AttrI.Value.Data);
 	Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
 
-
-	ParseF32Array(Mesh.Positions, Mesh.PositionsCount, NodePos.InnerText);
-
+	u32 IndicesCount = 3 * 3 * U32FromASCII(AttrI.Value.Data);
+	u32 *Indices = PushArray(Arena, IndicesCount, u32);
 
 	char *Context;
 	char *TokI = strtok_s((char *)NodeIndex.InnerText.Data, " ", &Context);
 
-	// NOTE(Justin): Unfortunately collada indices are not in a 1-1
-	// correspondence between positions, normals, and uvs. A map function could
-	// be used to convert the three indices into a unique index so that
-	// glDrawElements could be used...
 	u32 Index = 0;
-	Mesh.Indices[Index++] = U32FromASCII((u8 *)TokI);
+	u32 TriIndex = 0;
+	Indices[Index++] = U32FromASCII((u8 *)TokI);
+	Mesh.Indices[TriIndex++] = U32FromASCII((u8 *)TokI);
 	while(TokI)
 	{
 		TokI = strtok_s(0, " ", &Context);
+		Indices[Index++] = U32FromASCII((u8 *)TokI);
+
 		TokI = strtok_s(0, " ", &Context);
+		Indices[Index++] = U32FromASCII((u8 *)TokI);
+
 		TokI = strtok_s(0, " ", &Context);
 		if(TokI)
 		{
-			Mesh.Indices[Index++] = U32FromASCII((u8 *)TokI);
+			Indices[Index++] = U32FromASCII((u8 *)TokI);
+			Mesh.Indices[TriIndex++] = U32FromASCII((u8 *)TokI);
+		}
+	}
+
+	// TODO(Justin): Free or figure out a way to not have to do it this way.
+	u32 PositionCount = Mesh.PositionsCount;
+	f32 *Positions = PushArray(Arena, Mesh.PositionsCount, f32);
+	ParseF32Array(Positions, PositionCount, NodePos.InnerText);
+
+	u32 NormalCount = U32FromASCII(AttrN.Value.Data);
+	f32 *Normals = PushArray(Arena, NormalCount, f32);
+	ParseF32Array(Normals, NormalCount, NodeNormal.InnerText);
+
+	u32 UVCount = U32FromASCII(AttrUV.Value.Data);
+	f32 *UV = PushArray(Arena, UVCount, f32);
+	ParseF32Array(UV, UVCount, NodeUV.InnerText);
+
+
+	b32 *UniqueIndexTable = PushArray(Arena, Mesh.PositionsCount/3, b32);
+	for(u32 i = 0; i < Mesh.PositionsCount/3; ++i)
+	{
+		UniqueIndexTable[i] = true;
+	}
+
+	b32 AllUniquesFound = false;
+	u32 Stride = 3;
+	u32 UVStride = 2;
+	for(u32 i = 0; i < IndicesCount; i += 3)
+	{
+		u32 IndexP = Indices[i];
+		u32 IndexN = Indices[i + 1];
+		u32 IndexUV = Indices[i + 2];
+
+		b32 IsUniqueIndex = UniqueIndexTable[IndexP];
+		if(IsUniqueIndex)
+		{
+			f32 X = Positions[Stride * IndexP];
+			f32 Y = Positions[Stride * IndexP + 1];
+			f32 Z = Positions[Stride * IndexP + 2];
+
+			f32 Nx = Normals[Stride * IndexN];
+			f32 Ny = Normals[Stride * IndexN + 1];
+			f32 Nz = Normals[Stride * IndexN + 2];
+
+			f32 U = UV[UVStride * IndexUV];
+			f32 V = UV[UVStride * IndexUV + 1];
+
+			Mesh.Positions[Stride * IndexP] = X;
+			Mesh.Positions[Stride * IndexP + 1] = Y;
+			Mesh.Positions[Stride * IndexP + 2] = Z;
+
+			Mesh.Normals[Stride * IndexP] = Nx;
+			Mesh.Normals[Stride * IndexP + 1] = Ny;
+			Mesh.Normals[Stride * IndexP + 2] = Nz;
+
+			Mesh.UV[UVStride * IndexP] = U;
+			Mesh.UV[UVStride * IndexP + 1] = V;
+
+			UniqueIndexTable[IndexP] = false;
+
+			// TODO(Justin): Early out after finding all unique vertices.
 		}
 	}
 
@@ -1054,6 +1141,28 @@ GLProgramCreate(char *VS, char *FS)
 	return(Result);
 }
 
+internal void
+AttributesInterleave(f32 *BufferData, mesh *Mesh)
+{
+	u32 BufferIndex = 0;
+
+	u32 Stride = 3;
+	u32 UVStride = 2;
+	for(u32 Index = 0; Index < Mesh->PositionsCount/3; ++Index)
+	{
+		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index];
+		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index + 1];
+		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index + 2];
+
+		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index];
+		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index + 1];
+		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index + 2];
+
+		BufferData[BufferIndex++] = Mesh->UV[UVStride * Index];
+		BufferData[BufferIndex++] = Mesh->UV[UVStride * Index + 1];
+	}
+}
+
 int main(int Argc, char **Argv)
 {
 	void *Memory = calloc(Megabyte(1), sizeof(u8));
@@ -1086,6 +1195,7 @@ int main(int Argc, char **Argv)
 				loaded_dae CubeDae = ColladaFileLoad(Arena, "..\\data\\cube.dae");
 
 				mesh Cube = MeshInit(Arena, CubeDae);
+				v3 LightP = V3(0.0f, 5.0f, -0.5f);
 
 				mat4 ModelTransorm = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
 
@@ -1116,17 +1226,26 @@ int main(int Argc, char **Argv)
 				char *VsSrc = R"(
 				#version 330 core
 				layout (location = 0) in vec3 P;
+				layout (location = 1) in vec3 N;
+				layout (location = 0) in vec2 UV;
 
 				uniform mat4 MVP;
+
+				out vec3 Normal;
 				void main()
 				{
 					gl_Position = MVP * vec4(P, 1.0);
+					Normal = N;
 				})";
 
 				char *FsSrc = R"(
 				#version 330 core
-				out vec4 FragColor;
+
+				in vec3 Normal;
+
 				uniform vec4 uColor;
+
+				out vec4 FragColor;
 				void main()
 				{
 					FragColor = vec4(1.0, 0, 0, 1.0);
@@ -1135,14 +1254,25 @@ int main(int Argc, char **Argv)
 
 				u32 ShaderProgram = GLProgramCreate(VsSrc, FsSrc);
 
-				u32 PosVB, PosVA;
-				glGenVertexArrays(1, &PosVA);
-				glGenBuffers(1, &PosVB);
-				glBindVertexArray(PosVA);
-				glBindBuffer(GL_ARRAY_BUFFER, PosVB);
-				glBufferData(GL_ARRAY_BUFFER, Cube.PositionsCount * sizeof(f32), Cube.Positions, GL_STATIC_DRAW);
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
+				u32 TotalCount = Cube.PositionsCount + Cube.NormalsCount + Cube.UVCount;
+				f32 *BufferData = (f32 *)calloc(TotalCount, sizeof(f32));
+
+				AttributesInterleave(BufferData, &Cube);
+
+				u32 VB, VA;
+				glGenVertexArrays(1, &VA);
+				glGenBuffers(1, &VB);
+				glBindVertexArray(VA);
+				glBindBuffer(GL_ARRAY_BUFFER, VB);
+				glBufferData(GL_ARRAY_BUFFER, TotalCount * sizeof(f32), BufferData, GL_STATIC_DRAW);
+
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
+				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(3 * sizeof(f32)));
+				glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(6 * sizeof(f32)));
+
 				glEnableVertexAttribArray(0);
+				glEnableVertexAttribArray(1);
+				glEnableVertexAttribArray(2);
 
 				u32 IBO;
 				glGenBuffers(1, &IBO);
@@ -1158,6 +1288,7 @@ int main(int Argc, char **Argv)
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+					//glDrawArrays(GL_TRIANGLES, 0, 36);
 					glDrawElements(GL_TRIANGLES, Cube.IndicesCount, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
