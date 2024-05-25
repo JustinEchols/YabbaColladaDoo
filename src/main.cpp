@@ -103,32 +103,42 @@ MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 #include "xml.h"
 #include "xml.cpp"
 
+// NOTE(Justin): A vertex is set to be affected by AT MOST 3 joints;
 struct joint_info
 {
-	string Name;
-	s32 Index;
+	u32 Count;
+	u32 JointIndex[3];
+	u32 WeightIndex[3];
 };
 
+// NOTE(Justin): All the data is currently in 1-1 correspondence between the
+// attributes. I.e. the data for the first vertex is
+//	P[0] P[1] P[2]
+//	N[0] N[1] N[2]
+//	UV[0] UV[1]
+//
+// and so on. 
 struct mesh
 {
 	u32 PositionsCount;
-	f32 *Positions;
-
 	u32 NormalsCount;
-	f32 *Normals;
-
 	u32 UVCount;
-	f32 *UV;
-
-	u32 *Indices;
 	u32 IndicesCount;
-
 	u32 WeightCount;
+	u32 BindPosCount;
+
+	f32 *Positions;
+	f32 *Normals;
+	f32 *UV;
+	u32 *Indices;
 	f32 *Weights;
+	f32 *BindPoses;
+
+	u32 JointNameCount;
+	string *JointNames;
 
 	u32 JointInfoCount;
-	joint_info JointsInfo;
-
+	joint_info *JointsInfo;
 };
 
 internal s32
@@ -173,6 +183,8 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			FileReadEntireAndNullTerminate(Content, Size, FileHandle);
 			if(FileClose(FileHandle))
 			{
+				Result.FullPath = StringAllocAndCopyFromCstr(Arena, FileName);
+
 				char Buffer[512];
 				s32 InnerTextIndex = 0;
 				s32 Index = 0;
@@ -400,7 +412,6 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	f32 *UV = PushArray(Arena, UVCount, f32);
 	ParseF32Array(UV, UVCount, NodeUV.InnerText);
 
-
 	b32 *UniqueIndexTable = PushArray(Arena, Mesh.PositionsCount/3, b32);
 	for(u32 i = 0; i < Mesh.PositionsCount/3; ++i)
 	{
@@ -450,39 +461,33 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	// NOTE(Jusitn): Skeletion info
 	//
 	
-#if 0
 	xml_node Controllers = {};
-	xml_node NodeJointNameArray = {};
-	xml_node BindPos = {};
-	xml_node Weights = {};
-
 	NodeGet(Root, &Controllers, "library_controllers");
-	NodeGet(Root, &JointNameArray, "Name_array", "skin-joints-array");
 
-	NodeGet(&Controllers, &Weights, "float_array", "skin-weights-array");
+	// NOTE(Justin): Joint names.
+	ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
 
+	// NOTE(Justin): Bind poses
+	ParseXMLFloatArray(Arena, &Controllers, &Mesh.BindPoses, &Mesh.BindPosCount, "skin-bind_poses-array");
 
-	xml_attribute AttrWeights = NodeAttributeGet(&Weights, "count");
-	u32 WeightCount = U32FromASCII(AttrWeights.Value.Data);
-	Mesh.WeightCount = WeightCount;
-	Mesh.Weights = PushArray(Arena, Mesh.WeightCount, f32);
-	ParseF32Array(Mesh.Weights, Mesh.WeightCount, Weights.InnerText);
+	// NOTE(Justin): Vertex weights
+	ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
 
+#if 0
 
-	xml_node VertexWeights = {};
-	NodeGet(&Controllers, &VertexWeights, "float_array", "skin-weights-array");
+	// NOTE(Justin): Joint info
+	xml_node NodeJointsAndWeights = {};
+	NodeGet(&Controllers, &NodeJointsAndWeights, "vertex_weights");
+	xml_attribute AttrVertexWeightCount = NodeAttributeGet(&NodeJointsAndWeights, "count");
 
-	xml_node NodeVertexWeight= {};
-	NodeGet(&VertexWeights, &VertexWeightList, "vcount");
+	u32 VertexWeightCount = U32FromASCII(AttrVertexWeightCount.Value.Data);
+	u32 *VertexWe= PushArray(Arena, JointInfoCount, u32);
 
-	u32 VertexWeightCount = U32FromASCII(VertexWeights.Attributes[0].Value.Data);
-	u32 *VertexWeight = PushArray(Arena, VertexWeightCount, u32);
-
-
-	int y = 0;
+	xml_node NodeJointInfo = {}
+	NodeGet(&NodeVertexWeights, &NodeJointInfo, "vcount");
+	ParseU32Array(JointInfo, JointInfoCount, NodeJointInfo.InnerText);
 
 #endif
-
 
 
 	return(Mesh);
@@ -612,8 +617,6 @@ int main(int Argc, char **Argv)
 
 				mesh Cube = MeshInit(Arena, CubeDae);
 
-
-
 				mat4 ModelTransform = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
 
 				v3 CameraP = V3(0.0f, 5.0f, 3.0f);
@@ -735,7 +738,6 @@ int main(int Argc, char **Argv)
 				{
 					StartTime = (f32)glfwGetTime();
 
-
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -744,9 +746,7 @@ int main(int Argc, char **Argv)
 
 					glfwSwapBuffers(Window.Handle);
 
-
 					EndTime = (f32)glfwGetTime();
-
 					DtForFrame = EndTime - StartTime;
 
 					glfwPollEvents();
