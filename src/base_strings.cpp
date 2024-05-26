@@ -146,19 +146,27 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Str)
 	}
 }
 
+
 internal string
-StringAllocAndCopyFromCstr(memory_arena *Arena, char *Cstr)
+StringAllocAndCopy(memory_arena *Arena, string Str)
 {
-	Assert(Cstr);
+	Assert(Str.Data);
 
 	string Result = {};
-	string Temp = String((u8 *)Cstr);
-
-	Result.Size = Temp.Size;
+	
+	Result.Size = Str.Size;
 	Result.Data = PushArray(Arena, Result.Size + 1, u8);
-	ArrayCopy(Result.Size, Temp.Data, Result.Data);
+
+	ArrayCopy(Result.Size, Str.Data, Result.Data);
 	Result.Data[Result.Size] = '\0';
 
+	return(Result);
+}
+
+internal string
+StringAllocAndCopy(memory_arena *Arena, char *Cstr)
+{
+	string Result = StringAllocAndCopy(Arena, String((u8 *)Cstr));
 	return(Result);
 }
 
@@ -171,14 +179,14 @@ ParseStringArray(memory_arena *Arena, string *Dest, u32 DestCount, string Str)
 	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
 
 	u32 Index = 0;
-	Dest[Index++] = StringAllocAndCopyFromCstr(Arena, Tok);
+	Dest[Index++] = StringAllocAndCopy(Arena, Tok);
 
 	while(Tok)
 	{
 		Tok = strtok_s(0, " ", &Context);
 		if(Tok)
 		{
-			Dest[Index++] = StringAllocAndCopyFromCstr(Arena, Tok);
+			Dest[Index++] = StringAllocAndCopy(Arena, Tok);
 		}
 
 	}
