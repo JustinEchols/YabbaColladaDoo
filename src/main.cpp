@@ -16,7 +16,13 @@
  [] Handle meshes with materials
  [] Skeletal animation transforms
  [] Convert model data to simple format
+ [] Mesh initialization
+	[] Free or figure out a way to not have to not have to allocate so much when initalizing the mesh
+	[] Traverse the tree once.
+	[] Probably just need to traverse each sub tree that is one level down from the COLLADA node
+	[] Temporary memory? Or just parse the data directly from the inner text?
 
+ [X] Library Animations done in one tree traversal!
 */
 
 #include <GL/glew.h>
@@ -103,6 +109,18 @@ MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 #include "xml.h"
 #include "xml.cpp"
 
+internal u32
+U32ArraySum(u32 *A, u32 Count)
+{
+	u32 Result = 0;
+	for(u32 Index = 0; Index < Count; ++Index)
+	{
+		Result += A[Index];
+	}
+
+	return(Result);
+}
+
 // NOTE(Justin): A vertex is set to be affected by AT MOST 3 joints;
 struct joint_info
 {
@@ -111,13 +129,22 @@ struct joint_info
 	u32 WeightIndex[3];
 };
 
+struct animation_info
+{
+	string JointName;
+
+	u32 TimeCount;
+	f32 *Times;
+
+	u32 JointTransformCount;
+	f32 *JointTransforms;
+};
+
 // NOTE(Justin): All the data is currently in 1-1 correspondence between the
-// attributes. I.e. the data for the first vertex is
-//	P[0] P[1] P[2]
-//	N[0] N[1] N[2]
-//	UV[0] UV[1]
-//
-// and so on. 
+// attributes and skeleton info. I.e. the data for the first vertex is
+//	v0: P[0] P[1] P[2]
+//	n0: N[0] N[1] N[2]
+//	uv0: UV[0] UV[1]
 struct mesh
 {
 	u32 PositionsCount;
@@ -132,6 +159,10 @@ struct mesh
 	f32 *UV;
 	u32 *Indices;
 	f32 *Weights;
+
+	// NOTE(Justin): The bind poses are a mat4 and are stored by rows. So the
+	// first 16 floats represents a mat4 moreoever this is the inverse bind
+	// matrix for the first node in JointNames which is the root. 
 	f32 *BindPoses;
 
 	u32 JointNameCount;
@@ -139,6 +170,9 @@ struct mesh
 
 	u32 JointInfoCount;
 	joint_info *JointsInfo;
+
+	u32 AnimationInfoCount;
+	animation_info *AnimationsInfo;
 };
 
 internal s32
@@ -328,8 +362,48 @@ GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei 
 	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
-// TODO(Justin): Traverse the tree once.
-// TODO(Justin): Temporary memory.
+internal void
+AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationInfo, u32 *AnimationInfoIndex)
+{
+	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
+	{
+		xml_node *Node = Root->Children[ChildIndex];
+		Assert(Node);
+		if(StringsAreSame(Node->Tag, "float_array"))
+		{
+			if(SubStringExists(Node->Attributes[0].Value, "pose_matrix-input-array"))
+			{
+				animation_info *Info = AnimationInfo + *AnimationInfoIndex;
+				Info->TimeCount = U32FromAttributeValue(Node);
+				Info->Times = PushArray(Arena, Info->TimeCount, f32);
+				ParseF32Array(Info->Times, Info->TimeCount, Node->InnerText);
+			}
+			else if(SubStringExists(Node->Attributes[0].Value, "pose_matrix-output-array"))
+			{
+				animation_info *Info = AnimationInfo + *AnimationInfoIndex;
+				Info->JointTransformCount = U32FromAttributeValue(Node);
+				Info->JointTransforms = PushArray(Arena, Info->JointTransformCount, f32);
+				ParseF32Array(Info->JointTransforms, Info->JointTransformCount, Node->InnerText);
+			}
+		}
+		else if(StringsAreSame(Node->Tag, "channel"))
+		{
+			xml_attribute Attr = NodeAttributeGet(Node, "target");
+			char *AtForwardSlash = strstr((char *)Attr.Value.Data, "/");
+			string JointName = StringFromRange(Attr.Value.Data, (u8 *)AtForwardSlash);
+
+			animation_info *Info = AnimationInfo + *AnimationInfoIndex;
+			Info->JointName = JointName;
+
+			(*AnimationInfoIndex)++;
+		}
+		else if(*Node->Children)
+		{
+			AnimationInfoGet(Arena, Node, AnimationInfo, AnimationInfoIndex);
+		}
+	}
+}
+
 internal mesh
 MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 {
@@ -338,7 +412,7 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	xml_node *Root = DaeFile.Root;
 
 	//
-	// NOTE(Justin): Vertex data
+	// NOTE(Justin): Mesh/Skin info
 	//
 
 	xml_node Geometry = {};
@@ -353,30 +427,23 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(&Geometry, &NodeUV, "float_array", "mesh-map-0-array");
 	NodeGet(&Geometry, &NodeIndex, "p");
 
-	xml_attribute AttrP = NodeAttributeGet(&NodePos, "count");
-	xml_attribute AttrN = NodeAttributeGet(&NodeNormal, "count");
-	xml_attribute AttrUV = NodeAttributeGet(&NodeUV, "count");
-	xml_attribute AttrI = NodeAttributeGet(NodeIndex.Parent, "count");
+	u32 TriangleCount = U32FromAttributeValue(NodeIndex.Parent);
 
-	// NOTE(Justin): Init mesh positions.
-	Mesh.PositionsCount = U32FromASCII(AttrP.Value.Data);
-	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
-
+	Mesh.IndicesCount = 3 * TriangleCount;
+	Mesh.PositionsCount = U32FromAttributeValue(&NodePos);
 	Mesh.NormalsCount = Mesh.PositionsCount;
-	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
-
 	Mesh.UVCount = 2 * (Mesh.PositionsCount / 3);
-	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
 
-	// NOTE(Jusitn): # indices = indices/per triangle * # triangles
-	Mesh.IndicesCount = 3 * U32FromASCII(AttrI.Value.Data);
+	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
+	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
+	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
 	Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
 
-	u32 IndicesCount = 3 * 3 * U32FromASCII(AttrI.Value.Data);
+	u32 IndicesCount = 3 * 3 * TriangleCount;
 	u32 *Indices = PushArray(Arena, IndicesCount, u32);
 
-	char *Context;
-	char *TokI = strtok_s((char *)NodeIndex.InnerText.Data, " ", &Context);
+	char *ContextI;
+	char *TokI = strtok_s((char *)NodeIndex.InnerText.Data, " ", &ContextI);
 
 	u32 Index = 0;
 	u32 TriIndex = 0;
@@ -384,13 +451,13 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	Mesh.Indices[TriIndex++] = U32FromASCII((u8 *)TokI);
 	while(TokI)
 	{
-		TokI = strtok_s(0, " ", &Context);
+		TokI = strtok_s(0, " ", &ContextI);
 		Indices[Index++] = U32FromASCII((u8 *)TokI);
 
-		TokI = strtok_s(0, " ", &Context);
+		TokI = strtok_s(0, " ", &ContextI);
 		Indices[Index++] = U32FromASCII((u8 *)TokI);
 
-		TokI = strtok_s(0, " ", &Context);
+		TokI = strtok_s(0, " ", &ContextI);
 		if(TokI)
 		{
 			Indices[Index++] = U32FromASCII((u8 *)TokI);
@@ -398,19 +465,21 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 		}
 	}
 
-	// TODO(Justin): Free or figure out a way to not have to do it this way, or
-	// use temporary memory.
 	u32 PositionCount = Mesh.PositionsCount;
 	f32 *Positions = PushArray(Arena, Mesh.PositionsCount, f32);
 	ParseF32Array(Positions, PositionCount, NodePos.InnerText);
 
-	u32 NormalCount = U32FromASCII(AttrN.Value.Data);
+	u32 NormalCount = U32FromAttributeValue(&NodeNormal);
 	f32 *Normals = PushArray(Arena, NormalCount, f32);
 	ParseF32Array(Normals, NormalCount, NodeNormal.InnerText);
 
-	u32 UVCount = U32FromASCII(AttrUV.Value.Data);
+	u32 UVCount = U32FromAttributeValue(&NodeUV);
 	f32 *UV = PushArray(Arena, UVCount, f32);
 	ParseF32Array(UV, UVCount, NodeUV.InnerText);
+
+	//
+	// NOTE(Justin): Unify indices
+	//
 
 	b32 *UniqueIndexTable = PushArray(Arena, Mesh.PositionsCount/3, b32);
 	for(u32 i = 0; i < Mesh.PositionsCount/3; ++i)
@@ -452,8 +521,6 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 			Mesh.UV[UVStride * IndexP + 1] = V;
 
 			UniqueIndexTable[IndexP] = false;
-
-			// TODO(Justin): Early out after finding all unique vertices.
 		}
 	}
 
@@ -464,31 +531,66 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	xml_node Controllers = {};
 	NodeGet(Root, &Controllers, "library_controllers");
 
-	// NOTE(Justin): Joint names.
 	ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
-
-	// NOTE(Justin): Bind poses
 	ParseXMLFloatArray(Arena, &Controllers, &Mesh.BindPoses, &Mesh.BindPosCount, "skin-bind_poses-array");
-
-	// NOTE(Justin): Vertex weights
 	ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
 
-#if 0
-
 	// NOTE(Justin): Joint info
+	xml_node NodeJointCount = {};
+	NodeGet(&Controllers, &NodeJointCount, "vertex_weights");
+	u32 JointCount = U32FromAttributeValue(&NodeJointCount);
+	u32 *JointCountArray = PushArray(Arena, JointCount, u32);
+	ParseXMLU32Array(Arena, &NodeJointCount, &JointCountArray, JointCount, "vcount");
+
 	xml_node NodeJointsAndWeights = {};
-	NodeGet(&Controllers, &NodeJointsAndWeights, "vertex_weights");
-	xml_attribute AttrVertexWeightCount = NodeAttributeGet(&NodeJointsAndWeights, "count");
+	NodeGet(&Controllers, &NodeJointsAndWeights, "v");
 
-	u32 VertexWeightCount = U32FromASCII(AttrVertexWeightCount.Value.Data);
-	u32 *VertexWe= PushArray(Arena, JointInfoCount, u32);
+	u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointCount);
+	u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
+	ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
 
-	xml_node NodeJointInfo = {}
-	NodeGet(&NodeVertexWeights, &NodeJointInfo, "vcount");
-	ParseU32Array(JointInfo, JointInfoCount, NodeJointInfo.InnerText);
+	Mesh.JointInfoCount = JointCount;
+	Mesh.JointsInfo = PushArray(Arena, Mesh.JointInfoCount, joint_info);
 
-#endif
+	// TODO(Justin): Models could have many joints that affect a single vertex
+	// and this must be handled.
+	u32 JointsAndWeightsIndex = 0;
+	for(u32 JointIndex = 0; JointIndex < Mesh.JointInfoCount; ++JointIndex)
+	{
+		u32 JointCountForVertex = JointCountArray[JointIndex];
 
+		joint_info *JointInfo = Mesh.JointsInfo + JointIndex;
+		JointInfo->Count = JointCountForVertex;
+		for(u32 k = 0; k < JointInfo->Count; ++k)
+		{
+			JointInfo->JointIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
+			JointInfo->WeightIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
+		}
+	}
+
+	//
+	// NOTE(Justin): Animations
+	//
+
+	xml_node LibAnimations = {};
+	NodeGet(Root, &LibAnimations, "library_animations");
+
+	xml_node *AnimRoot = LibAnimations.Children[0];
+
+	Mesh.AnimationInfoCount = AnimRoot->ChildrenCount;
+	Mesh.AnimationsInfo = PushArray(Arena, Mesh.AnimationInfoCount, animation_info);
+
+	animation_info *Info = Mesh.AnimationsInfo;
+	u32 AnimationInfoIndex = 0;
+	AnimationInfoGet(Arena, AnimRoot, Info, &AnimationInfoIndex);
+
+	Assert(AnimationInfoIndex == Mesh.AnimationInfoCount);
+
+	//
+	// NOTE(Justin): Visual Scenes
+	//
+
+	int y = 0;
 
 	return(Mesh);
 }
