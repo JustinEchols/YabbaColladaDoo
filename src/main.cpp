@@ -6,12 +6,12 @@
  [] Better buffering of text using memory arenas
  [] Remove crt functions
  [] Change children array from fixed size to allocate on demand
+	[] Is there a way to a priori determine the size (then can allocate)?
 	[] Sparse hash table?
 	[] Dynamic list/array
-	[] Is there a way to a priori determine the size (then can allocate)?
  [] Mesh initialization
 	[X] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
-		[] Confirm using Phong Shading
+		[] Confirm using Phong lighting
 	[] Init a mesh with one tree traversal
 	[] Free or figure out a way to not have to not have to allocate so much when initalizing the mesh
 	[] Traverse the tree once.
@@ -46,7 +46,7 @@
 #define DegreeToRad(Degrees) ((Degrees) * (PI32 / 180.0f))
 
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
-#define COLLADA_NODE_CHILDREN_MAX_COUNT 30
+#define COLLADA_NODE_CHILDREN_MAX_COUNT 50
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -131,6 +131,34 @@ struct joint_info
 	u32 WeightIndex[3];
 };
 
+struct joint
+{
+	string Name;
+
+	// NOTE(Justin): This is the index of the Pose transform in the uniform
+	// array that is sent to the shader.
+	s32 PoseTransformIndex;
+
+	// NOTE(Justin): In model space. This is the transform that is sent to the
+	// shader in a uniform array and is the transform required to set this
+	// particular joint into the correct pose of the current key frame.
+
+	f32 *PoseTransform;
+
+	// NOTE(Justin): In parent space. This is the transform that tells us what
+	// the joint is supposed to be when the model is at rest but it is in terms
+	// of the parent space. It is mainly used to calculate the inverse rest pose
+	// transform. 
+	f32 *LocalRestPoseTransform;
+
+	// NOTE(Justin):
+	f32 *InverseRestPose;
+
+	s32 ParentIndex;
+	//joint *Parent;
+	//joint **Children;
+};
+
 struct animation_info
 {
 	string JointName;
@@ -154,7 +182,7 @@ struct mesh
 	u32 UVCount;
 	u32 IndicesCount;
 	u32 WeightCount;
-	u32 BindPosCount;
+	u32 RestPosTransformCount;
 
 	f32 *Positions;
 	f32 *Normals;
@@ -165,15 +193,16 @@ struct mesh
 	// NOTE(Justin): The bind poses are a mat4 and are stored by rows. So the
 	// first 16 floats represents a mat4 moreoever this is the inverse bind
 	// matrix for the first node in JointNames which is the root. 
-	f32 *BindPoses;
+	f32 *RestPoseTransforms;
 
 	u32 JointNameCount;
-	string *JointNames;
-
 	u32 JointInfoCount;
-	joint_info *JointsInfo;
-
+	u32 JointCount;
 	u32 AnimationInfoCount;
+
+	string *JointNames;
+	joint_info *JointsInfo;
+	joint *Joints;
 	animation_info *AnimationsInfo;
 };
 
@@ -324,7 +353,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 							CurrentNode->Tag = Token;
 							Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 							CurrentNode->InnerText = Token;
-
 						}
 					}
 				}
@@ -364,6 +392,8 @@ GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei 
 	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
+// NOTE(Justin): Think carefully about how to recurse here. This logic does not
+// work in general
 internal void
 AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationInfo, u32 *AnimationInfoIndex)
 {
@@ -402,6 +432,73 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationI
 		else if(*Node->Children)
 		{
 			AnimationInfoGet(Arena, Node, AnimationInfo, AnimationInfoIndex);
+		}
+	}
+}
+
+// NOTE(Justin): What is a good return value? The indices are stored as a u32
+// but if we initialize the result to 0 and return it then the current joint
+// will think that the parent is the root joint. We could initialize a return
+// value to -1 which is an s32 then cast the s32 to a u32. Or initialize the
+// value to a large u32?
+internal s32
+JointParentIndex(string *JointNames, u32 JointNameCount, string ParentName)
+{
+	s32 Result = -1;
+
+	for(u32 Index = 0; Index < JointNameCount; ++Index)
+	{
+		string *Name = JointNames + Index;
+		if(StringsAreSame(*Name, ParentName))
+		{
+			Result = Index;
+			break;
+		}
+	}
+
+
+	return(Result);
+}
+
+// TODO(Justin): How much guarding/checking should there be?
+// TODO(Justin): Only the matrix, joint name, and parent index are retrieved
+// now. What about angle, quaternion?
+internal void
+JointsGet(memory_arena *Arena, xml_node *Root, mesh *Mesh, joint *Joints, u32 *JointIndex)
+{
+	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
+	{
+		xml_node *Node = Root->Children[ChildIndex];
+		Assert(Node);
+		if(StringsAreSame(Node->Tag, "node"))
+		{
+			joint *Joint = Joints + *JointIndex;
+
+			xml_attribute SID = NodeAttributeGet(Node, "sid");
+			xml_attribute ParentSID = NodeAttributeGet(Node->Parent, "sid");
+
+			Joint->Name = SID.Value;
+
+			s32 ParentIndex = JointParentIndex(Mesh->JointNames, Mesh->JointNameCount, ParentSID.Value);
+			Assert(ParentIndex != - 1);
+			Joint->ParentIndex = (u32)ParentIndex;
+
+		}
+		else if(StringsAreSame(Node->Tag, "matrix"))
+		{
+			joint *Joint = Joints + *JointIndex;
+
+			// TODO(Justin): Allocate beforehand. We know the size of each
+			// transfor 16 f32s and we know how many joints there are as well
+			Joint->LocalRestPoseTransform = PushArray(Arena, 16, f32);
+			ParseF32Array(Joint->LocalRestPoseTransform, 16, Node->InnerText);
+
+			(*JointIndex)++;
+		}
+
+		if(*Node->Children)
+		{
+			JointsGet(Arena, Node, Mesh, Joints, JointIndex);
 		}
 	}
 }
@@ -535,7 +632,7 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	if(Controllers.ChildrenCount != 0)
 	{
 		ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
-		ParseXMLFloatArray(Arena, &Controllers, &Mesh.BindPoses, &Mesh.BindPosCount, "skin-bind_poses-array");
+		ParseXMLFloatArray(Arena, &Controllers, &Mesh.RestPoseTransforms, &Mesh.RestPosTransformCount, "skin-bind_poses-array");
 		ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
 
 		xml_node NodeJointCount = {};
@@ -598,10 +695,19 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
 	if(LibVisScenes.ChildrenCount != 0)
 	{
+		Mesh.JointCount = Mesh.JointNameCount;
+		Mesh.Joints = PushArray(Arena, Mesh.JointCount, joint);
 
+		xml_node JointRoot = {};
+		FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
+
+		u32 JointIndex = 0;
+		joint *Joints = Mesh.Joints;
+		Joints->Name = Mesh.JointNames[0];
+		Joints->ParentIndex = -1;
+
+		JointsGet(Arena, &JointRoot, &Mesh, Joints, &JointIndex);
 	}
-
-	int y = 0;
 
 	return(Mesh);
 }
