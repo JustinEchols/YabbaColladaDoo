@@ -219,7 +219,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			FileReadEntireAndNullTerminate(Content, Size, FileHandle);
 			if(FileClose(FileHandle))
 			{
-				Result.FullPath = StringAllocAndCopyFromCstr(Arena, FileName);
+				Result.FullPath = StringAllocAndCopy(Arena, FileName);
 
 				char Buffer[512];
 				s32 InnerTextIndex = 0;
@@ -532,13 +532,12 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	
 	xml_node Controllers = {};
 	NodeGet(Root, &Controllers, "library_controllers");
-	if(Controllers->ChildrenCount != 0)
+	if(Controllers.ChildrenCount != 0)
 	{
 		ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
 		ParseXMLFloatArray(Arena, &Controllers, &Mesh.BindPoses, &Mesh.BindPosCount, "skin-bind_poses-array");
 		ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
 
-		// NOTE(Justin): Joint info
 		xml_node NodeJointCount = {};
 		NodeGet(&Controllers, &NodeJointCount, "vertex_weights");
 		u32 JointCount = U32FromAttributeValue(&NodeJointCount);
@@ -555,8 +554,7 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 		Mesh.JointInfoCount = JointCount;
 		Mesh.JointsInfo = PushArray(Arena, Mesh.JointInfoCount, joint_info);
 
-		// TODO(Justin): Models could have many joints that affect a single vertex
-		// and this must be handled.
+		// TODO(Justin): Models could have many joints that affect a single vertex and this must be handled.
 		u32 JointsAndWeightsIndex = 0;
 		for(u32 JointIndex = 0; JointIndex < Mesh.JointInfoCount; ++JointIndex)
 		{
@@ -578,7 +576,7 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 	xml_node LibAnimations = {};
 	NodeGet(Root, &LibAnimations, "library_animations");
-	if(LibAnimations->ChildrenCount != 0)
+	if(LibAnimations.ChildrenCount != 0)
 	{
 		xml_node *AnimRoot = LibAnimations.Children[0];
 
@@ -587,14 +585,21 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 		animation_info *Info = Mesh.AnimationsInfo;
 		u32 AnimationInfoIndex = 0;
-		AnimationInfoGet(Arena, AnimRoot, Info, &AnimationInfoIndex);
 
+		AnimationInfoGet(Arena, AnimRoot, Info, &AnimationInfoIndex);
 		Assert(AnimationInfoIndex == Mesh.AnimationInfoCount);
 	}
 
 	//
 	// NOTE(Justin): Visual Scenes
 	//
+
+	xml_node LibVisScenes = {};
+	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
+	if(LibVisScenes.ChildrenCount != 0)
+	{
+
+	}
 
 	int y = 0;
 
