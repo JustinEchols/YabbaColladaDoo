@@ -3,26 +3,28 @@
 
  TODO(Justin):
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
- [] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
-		- Confirm using Phong Shading
  [] Better buffering of text using memory arenas
  [] Remove crt functions
- [] Init a mesh with one tree traversal
  [] Change children array from fixed size to allocate on demand
-		- Sparse hash table?
-		- Dynamic list/array
-		- Is there a way to a priori determine the size (then can allocate)?
- [] Handle more complicated meshes
- [] Handle meshes with materials
- [] Skeletal animation transforms
- [] Convert model data to simple format
+	[] Sparse hash table?
+	[] Dynamic list/array
+	[] Is there a way to a priori determine the size (then can allocate)?
  [] Mesh initialization
+	[X] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
+		[] Confirm using Phong Shading
+	[] Init a mesh with one tree traversal
 	[] Free or figure out a way to not have to not have to allocate so much when initalizing the mesh
 	[] Traverse the tree once.
 	[] Probably just need to traverse each sub tree that is one level down from the COLLADA node
 	[] Temporary memory? Or just parse the data directly from the inner text?
-
- [X] Library Animations done in one tree traversal!
+	[] Handle more complicated meshes
+	[] Handle meshes with materials
+ [] Skeleton initialization
+	[] Library Controllers done in one tree traversal
+	[] Skeletal animation transforms
+	[X] Library Animations done in one tree traversal
+ [] Write model data to simple file format (mesh/animation/material)
+ 
 */
 
 #include <GL/glew.h>
@@ -530,41 +532,43 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	
 	xml_node Controllers = {};
 	NodeGet(Root, &Controllers, "library_controllers");
-
-	ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
-	ParseXMLFloatArray(Arena, &Controllers, &Mesh.BindPoses, &Mesh.BindPosCount, "skin-bind_poses-array");
-	ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
-
-	// NOTE(Justin): Joint info
-	xml_node NodeJointCount = {};
-	NodeGet(&Controllers, &NodeJointCount, "vertex_weights");
-	u32 JointCount = U32FromAttributeValue(&NodeJointCount);
-	u32 *JointCountArray = PushArray(Arena, JointCount, u32);
-	ParseXMLU32Array(Arena, &NodeJointCount, &JointCountArray, JointCount, "vcount");
-
-	xml_node NodeJointsAndWeights = {};
-	NodeGet(&Controllers, &NodeJointsAndWeights, "v");
-
-	u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointCount);
-	u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
-	ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
-
-	Mesh.JointInfoCount = JointCount;
-	Mesh.JointsInfo = PushArray(Arena, Mesh.JointInfoCount, joint_info);
-
-	// TODO(Justin): Models could have many joints that affect a single vertex
-	// and this must be handled.
-	u32 JointsAndWeightsIndex = 0;
-	for(u32 JointIndex = 0; JointIndex < Mesh.JointInfoCount; ++JointIndex)
+	if(Controllers->ChildrenCount != 0)
 	{
-		u32 JointCountForVertex = JointCountArray[JointIndex];
+		ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
+		ParseXMLFloatArray(Arena, &Controllers, &Mesh.BindPoses, &Mesh.BindPosCount, "skin-bind_poses-array");
+		ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
 
-		joint_info *JointInfo = Mesh.JointsInfo + JointIndex;
-		JointInfo->Count = JointCountForVertex;
-		for(u32 k = 0; k < JointInfo->Count; ++k)
+		// NOTE(Justin): Joint info
+		xml_node NodeJointCount = {};
+		NodeGet(&Controllers, &NodeJointCount, "vertex_weights");
+		u32 JointCount = U32FromAttributeValue(&NodeJointCount);
+		u32 *JointCountArray = PushArray(Arena, JointCount, u32);
+		ParseXMLU32Array(Arena, &NodeJointCount, &JointCountArray, JointCount, "vcount");
+
+		xml_node NodeJointsAndWeights = {};
+		NodeGet(&Controllers, &NodeJointsAndWeights, "v");
+
+		u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointCount);
+		u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
+		ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
+
+		Mesh.JointInfoCount = JointCount;
+		Mesh.JointsInfo = PushArray(Arena, Mesh.JointInfoCount, joint_info);
+
+		// TODO(Justin): Models could have many joints that affect a single vertex
+		// and this must be handled.
+		u32 JointsAndWeightsIndex = 0;
+		for(u32 JointIndex = 0; JointIndex < Mesh.JointInfoCount; ++JointIndex)
 		{
-			JointInfo->JointIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
-			JointInfo->WeightIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
+			u32 JointCountForVertex = JointCountArray[JointIndex];
+
+			joint_info *JointInfo = Mesh.JointsInfo + JointIndex;
+			JointInfo->Count = JointCountForVertex;
+			for(u32 k = 0; k < JointInfo->Count; ++k)
+			{
+				JointInfo->JointIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
+				JointInfo->WeightIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
+			}
 		}
 	}
 
@@ -574,17 +578,19 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 	xml_node LibAnimations = {};
 	NodeGet(Root, &LibAnimations, "library_animations");
+	if(LibAnimations->ChildrenCount != 0)
+	{
+		xml_node *AnimRoot = LibAnimations.Children[0];
 
-	xml_node *AnimRoot = LibAnimations.Children[0];
+		Mesh.AnimationInfoCount = AnimRoot->ChildrenCount;
+		Mesh.AnimationsInfo = PushArray(Arena, Mesh.AnimationInfoCount, animation_info);
 
-	Mesh.AnimationInfoCount = AnimRoot->ChildrenCount;
-	Mesh.AnimationsInfo = PushArray(Arena, Mesh.AnimationInfoCount, animation_info);
+		animation_info *Info = Mesh.AnimationsInfo;
+		u32 AnimationInfoIndex = 0;
+		AnimationInfoGet(Arena, AnimRoot, Info, &AnimationInfoIndex);
 
-	animation_info *Info = Mesh.AnimationsInfo;
-	u32 AnimationInfoIndex = 0;
-	AnimationInfoGet(Arena, AnimRoot, Info, &AnimationInfoIndex);
-
-	Assert(AnimationInfoIndex == Mesh.AnimationInfoCount);
+		Assert(AnimationInfoIndex == Mesh.AnimationInfoCount);
+	}
 
 	//
 	// NOTE(Justin): Visual Scenes
