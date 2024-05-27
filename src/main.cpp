@@ -24,7 +24,10 @@
 	[] Skeletal animation transforms
 	[X] Library Animations done in one tree traversal
  [] Write model data to simple file format (mesh/animation/material)
+ [] How to determine the skeleton? Instance controller and skeleton node however there can exist more than one
+	skeleton in a collada file.
  
+ [] To get joints
 */
 
 #include <GL/glew.h>
@@ -47,6 +50,10 @@
 
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
 #define COLLADA_NODE_CHILDREN_MAX_COUNT 50
+
+#define COMPONENT_COUNT_V3 3
+#define COMPONENT_COUNT_N 3
+#define COMPONENT_COUNT_UV 2
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -123,6 +130,33 @@ U32ArraySum(u32 *A, u32 Count)
 	return(Result);
 }
 
+char *BasicVsSrc = R"(
+#version 330 core
+layout (location = 0) in vec3 P;
+layout (location = 1) in vec3 N;
+layout (location = 2) in vec2 UV;
+
+uniform mat4 Model;
+uniform mat4 View;
+uniform mat4 Projection;
+
+void main()
+{
+	gl_Position = Projection * View * Model * vec4(P, 1.0);
+
+})";
+
+char *BasicFsSrc = R"(
+#version 330 core
+
+uniform vec3 Color;
+
+out vec4 Result;
+void main()
+{
+	Result = vec4(Color, 1.0);
+})";
+
 // NOTE(Justin): A vertex is set to be affected by AT MOST 3 joints;
 struct joint_info
 {
@@ -131,34 +165,30 @@ struct joint_info
 	u32 WeightIndex[3];
 };
 
+// NOTE(Justin): The pose transform of a joint is at index PoseTransformIndex in the uniform array
+
+// NOTE(Justin): PosTransform is in model space. This is the transform that is sent to the
+// shader in a uniform array and is one of the transforms used to calculate the new model space position of the vertex in the shader
+
+// NOTE(Justin): LocalResPoseTransform is in parent space. This is the transform that tells us what
+// the joint is supposed to be when the model is at rest but it is in terms
+// of the parent space. It is mainly used to calculate the inverse rest pose
+// transform. 
 struct joint
 {
 	string Name;
 
-	// NOTE(Justin): This is the index of the Pose transform in the uniform
-	// array that is sent to the shader.
+	s32 ParentIndex;
+
 	s32 PoseTransformIndex;
-
-	// NOTE(Justin): In model space. This is the transform that is sent to the
-	// shader in a uniform array and is the transform required to set this
-	// particular joint into the correct pose of the current key frame.
-
 	f32 *PoseTransform;
 
-	// NOTE(Justin): In parent space. This is the transform that tells us what
-	// the joint is supposed to be when the model is at rest but it is in terms
-	// of the parent space. It is mainly used to calculate the inverse rest pose
-	// transform. 
 	f32 *LocalRestPoseTransform;
-
-	// NOTE(Justin):
 	f32 *InverseRestPose;
-
-	s32 ParentIndex;
-	//joint *Parent;
-	//joint **Children;
 };
 
+// NOTE(Justin): The last f32 in the array of times gives the length of the
+// animation.
 struct animation_info
 {
 	string JointName;
@@ -425,7 +455,7 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationI
 			string JointName = StringFromRange(Attr.Value.Data, (u8 *)AtForwardSlash);
 
 			animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-			Info->JointName = JointName;
+			Info->JointName = StringAllocAndCopy(Arena, JointName);
 
 			(*AnimationInfoIndex)++;
 		}
@@ -442,20 +472,19 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationI
 // value to -1 which is an s32 then cast the s32 to a u32. Or initialize the
 // value to a large u32?
 internal s32
-JointParentIndex(string *JointNames, u32 JointNameCount, string ParentName)
+JointIndexGet(string *JointNames, u32 JointNameCount, string JointName)
 {
 	s32 Result = -1;
 
 	for(u32 Index = 0; Index < JointNameCount; ++Index)
 	{
 		string *Name = JointNames + Index;
-		if(StringsAreSame(*Name, ParentName))
+		if(StringsAreSame(*Name, JointName))
 		{
 			Result = Index;
 			break;
 		}
 	}
-
 
 	return(Result);
 }
@@ -479,8 +508,12 @@ JointsGet(memory_arena *Arena, xml_node *Root, mesh *Mesh, joint *Joints, u32 *J
 
 			Joint->Name = SID.Value;
 
-			s32 ParentIndex = JointParentIndex(Mesh->JointNames, Mesh->JointNameCount, ParentSID.Value);
+			s32 PoseTransformIndex = JointIndexGet(Mesh->JointNames, Mesh->JointNameCount, SID.Value);
+			s32 ParentIndex = JointIndexGet(Mesh->JointNames, Mesh->JointNameCount, ParentSID.Value);
+			Assert(PoseTransformIndex != - 1);
 			Assert(ParentIndex != - 1);
+
+			Joint->PoseTransformIndex = (u32)PoseTransformIndex;
 			Joint->ParentIndex = (u32)ParentIndex;
 
 		}
@@ -688,11 +721,14 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 	}
 
 	//
-	// NOTE(Justin): Visual Scenes
+	// NOTE(Justin): Visual Scenes (but only joint tree)
 	//
 
 	xml_node LibVisScenes = {};
 	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
+
+	xml_node Skeleton = {};
+	NodeGet(Root, &Skeleton, "skeleton");
 	if(LibVisScenes.ChildrenCount != 0)
 	{
 		Mesh.JointCount = Mesh.JointNameCount;
@@ -700,16 +736,39 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 
 		xml_node JointRoot = {};
 		FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
+		if(JointRoot.ChildrenCount != 0)
+		{
+			u32 JointIndex = 0;
+			joint *Joints = Mesh.Joints;
 
-		u32 JointIndex = 0;
-		joint *Joints = Mesh.Joints;
-		Joints->Name = Mesh.JointNames[0];
-		Joints->ParentIndex = -1;
+			Joints->Name = Mesh.JointNames[0];
+			Joints->ParentIndex = -1;
 
-		JointsGet(Arena, &JointRoot, &Mesh, Joints, &JointIndex);
+			JointsGet(Arena, &JointRoot, &Mesh, Joints, &JointIndex);
+		}
 	}
 
 	return(Mesh);
+}
+
+internal void
+GLVbInitAndPopulate(u32 *VB, u32 VA, u32 Index, u32 ComponentCount, f32 *BufferData, u32 TotalCount)
+{
+	glGenBuffers(1, VB);
+	glBindVertexArray(VA);
+	glBindBuffer(GL_ARRAY_BUFFER, *VB);
+	glBufferData(GL_ARRAY_BUFFER, TotalCount * sizeof(f32), BufferData, GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(Index);
+	glVertexAttribPointer(Index, ComponentCount, GL_FLOAT, GL_FALSE, 0, (void *)0);
+}
+
+internal void
+GLIBOInit(u32 *IBO, u32 *Indices, u32 IndicesCount)
+{
+	glGenBuffers(1, IBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *IBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndicesCount * sizeof(u32), Indices, GL_STATIC_DRAW);
 }
 
 internal u32
@@ -803,6 +862,8 @@ AttributesInterleave(f32 *BufferData, mesh *Mesh)
 	}
 }
 
+
+
 int main(int Argc, char **Argv)
 {
 	void *Memory = calloc(Megabyte(1), sizeof(u8));
@@ -835,6 +896,7 @@ int main(int Argc, char **Argv)
 				loaded_dae CubeDae = ColladaFileLoad(Arena, "..\\data\\thingamajig.dae");
 
 				mesh Cube = MeshInit(Arena, CubeDae);
+				v3 Color = V3(1.0f, 0.5f, 0.31f);
 
 				mat4 ModelTransform = Mat4Translate(V3(0.0f, 0.0f, -5.0f));
 
@@ -852,11 +914,6 @@ int main(int Argc, char **Argv)
 						   CameraTransform *
 						   ModelTransform;
 
-
-				v3 LightP = V3(0.0f, 5.0f, -0.5f);
-				v3 LightC = V3(1.0f);
-				v3 Color = V3(1.0f, 0.5f, 0.31f);
-
 				glEnable(GL_DEBUG_OUTPUT);
 				glDebugMessageCallback(GLDebugCallback, 0);
 
@@ -867,56 +924,11 @@ int main(int Argc, char **Argv)
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-				char *VsSrc = R"(
-				#version 330 core
-				layout (location = 0) in vec3 P;
-				layout (location = 1) in vec3 N;
-				layout (location = 2) in vec2 UV;
-
-				uniform mat4 Model;
-				uniform mat4 View;
-				uniform mat4 Projection;
-
-				out vec3 Normal;
-				out vec3 FragP;
-				void main()
-				{
-					FragP = vec3(Model * vec4(P, 1.0));
-					Normal = mat3(transpose(inverse(Model))) * N;
-
-					gl_Position = Projection * View * vec4(FragP, 1.0);
-
-				})";
-
-				char *FsSrc = R"(
-				#version 330 core
-
-				in vec3 Normal;
-				in vec3 FragP;
-
-				uniform vec3 LightP;
-				uniform vec3 LightC;
-				uniform vec3 CameraP;
-				uniform vec3 Color;
-
-				out vec4 FragColor;
-				void main()
-				{
-					vec3 Ambient = 0.1f * LightC;
-
-					vec3 FragToLight = normalize(LightP - FragP);
-					vec3 Norm = normalize(Normal);
-					vec3 Diffuse = max(dot(FragToLight, Norm), 0.0) * LightC;
-
-					FragColor = vec4((Ambient + Diffuse) * Color, 1.0f);
-				})";
-
-
-				u32 ShaderProgram = GLProgramCreate(VsSrc, FsSrc);
-
+				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
+#if 0
 				u32 TotalCount = Cube.PositionsCount + Cube.NormalsCount + Cube.UVCount;
 				f32 *BufferData = (f32 *)calloc(TotalCount, sizeof(f32));
-
+				
 				AttributesInterleave(BufferData, &Cube);
 
 				u32 VB, VA;
@@ -938,17 +950,25 @@ int main(int Argc, char **Argv)
 				glGenBuffers(1, &IBO);
 				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
 				glBufferData(GL_ELEMENT_ARRAY_BUFFER, Cube.IndicesCount * sizeof(u32), Cube.Indices, GL_STATIC_DRAW);
+#else
+				u32 VA;
+				u32 PosVB, NormVB, TexVB;
+				u32 IBO;
+
+				glGenVertexArrays(1, &VA);
+
+				GLVbInitAndPopulate(&PosVB, VA, 0, COMPONENT_COUNT_V3, Cube.Positions, Cube.PositionsCount);
+				GLVbInitAndPopulate(&NormVB, VA, 1, COMPONENT_COUNT_N, Cube.Normals, Cube.NormalsCount);
+				GLVbInitAndPopulate(&TexVB, VA, 2, COMPONENT_COUNT_UV, Cube.UV, Cube.UVCount);
+
+				GLIBOInit(&IBO, Cube.Indices, Cube.IndicesCount);
+#endif
 
 				glUseProgram(ShaderProgram);
 				UniformMatrixSet(ShaderProgram, "Model", ModelTransform);
 				UniformMatrixSet(ShaderProgram, "View", CameraTransform);
 				UniformMatrixSet(ShaderProgram, "Projection", PerspectiveTransform);
-
-				UniformV3Set(ShaderProgram, "LightP", LightP);
-				UniformV3Set(ShaderProgram, "LightC", LightC);
-				UniformV3Set(ShaderProgram, "CameraP", CameraP);
 				UniformV3Set(ShaderProgram, "Color", Color);
-
 
 				f32 DtForFrame = 0.0f;
 				f32 StartTime = 0.0f;
@@ -960,7 +980,6 @@ int main(int Argc, char **Argv)
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-					glUseProgram(ShaderProgram);
 					glDrawElements(GL_TRIANGLES, Cube.IndicesCount, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
