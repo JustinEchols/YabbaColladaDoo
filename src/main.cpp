@@ -27,7 +27,7 @@
  [] How to determine the skeleton? Instance controller and skeleton node however there can exist more than one
 	skeleton in a collada file.
  
- [] To get joints
+ 
 */
 
 #include <GL/glew.h>
@@ -112,12 +112,6 @@ MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 	return(DestInit);
 }
 
-#include "base_strings.h"
-#include "base_strings.cpp"
-#include "base_math.h"
-#include "xml.h"
-#include "xml.cpp"
-
 internal u32
 U32ArraySum(u32 *A, u32 Count)
 {
@@ -126,15 +120,26 @@ U32ArraySum(u32 *A, u32 Count)
 	{
 		Result += A[Index];
 	}
-
 	return(Result);
 }
 
+#include "base_strings.h"
+#include "base_strings.cpp"
+#include "base_math.h"
+#include "xml.h"
+#include "xml.cpp"
+#include "mesh.h"
+#include "mesh.cpp"
+#include "gl_util.cpp"
+
 char *BasicVsSrc = R"(
-#version 330 core
+#version 430 core
 layout (location = 0) in vec3 P;
 layout (location = 1) in vec3 N;
 layout (location = 2) in vec2 UV;
+layout (location = 3) in uint JointCount;
+layout (location = 4) in uvec3 JointIndex;
+layout (location = 5) in uvec3 WeightIndex;
 
 uniform mat4 Model;
 uniform mat4 View;
@@ -147,7 +152,7 @@ void main()
 })";
 
 char *BasicFsSrc = R"(
-#version 330 core
+#version 430 core
 
 uniform vec3 Color;
 
@@ -156,85 +161,6 @@ void main()
 {
 	Result = vec4(Color, 1.0);
 })";
-
-// NOTE(Justin): A vertex is set to be affected by AT MOST 3 joints;
-struct joint_info
-{
-	u32 Count;
-	u32 JointIndex[3];
-	u32 WeightIndex[3];
-};
-
-// NOTE(Justin): The pose transform of a joint is at index PoseTransformIndex in the uniform array
-
-// NOTE(Justin): PosTransform is in model space. This is the transform that is sent to the
-// shader in a uniform array and is one of the transforms used to calculate the new model space position of the vertex in the shader
-
-// NOTE(Justin): LocalResPoseTransform is in parent space. This is the transform that tells us what
-// the joint is supposed to be when the model is at rest but it is in terms
-// of the parent space. It is mainly used to calculate the inverse rest pose
-// transform. 
-struct joint
-{
-	string Name;
-
-	s32 ParentIndex;
-
-	s32 PoseTransformIndex;
-	f32 *PoseTransform;
-
-	f32 *LocalRestPoseTransform;
-	f32 *InverseRestPose;
-};
-
-// NOTE(Justin): The last f32 in the array of times gives the length of the
-// animation.
-struct animation_info
-{
-	string JointName;
-
-	u32 TimeCount;
-	f32 *Times;
-
-	u32 JointTransformCount;
-	f32 *JointTransforms;
-};
-
-// NOTE(Justin): All the data is currently in 1-1 correspondence between the
-// attributes and skeleton info. I.e. the data for the first vertex is
-//	v0: P[0] P[1] P[2]
-//	n0: N[0] N[1] N[2]
-//	uv0: UV[0] UV[1]
-struct mesh
-{
-	u32 PositionsCount;
-	u32 NormalsCount;
-	u32 UVCount;
-	u32 IndicesCount;
-	u32 WeightCount;
-	u32 RestPosTransformCount;
-
-	f32 *Positions;
-	f32 *Normals;
-	f32 *UV;
-	u32 *Indices;
-	f32 *Weights;
-
-	// NOTE(Justin): The bind poses are a mat4 and are stored by rows. So the
-	// first 16 floats represents a mat4 moreoever this is the inverse bind
-	// matrix for the first node in JointNames which is the root. 
-	f32 *RestPoseTransforms;
-
-	u32 JointNameCount;
-	u32 JointInfoCount;
-	u32 JointCount;
-	u32 AnimationInfoCount;
-
-	string *JointNames;
-	joint_info *JointsInfo;
-	joint *Joints;
-	animation_info *AnimationsInfo;
-};
 
 internal s32
 FileSizeGet(FILE *OpenedFile)
@@ -393,477 +319,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 	return(Result);
 }
 
-//
-// NOTE(Justin): GLFW & GL
-//
-
-struct window
-{
-	GLFWwindow *Handle;
-	s32 Width, Height;
-};
-
-internal void
-GLFWErrorCallback(s32 ErrorCode, const char *Message)
-{
-	printf("GLFW Error: Code %d Message %s", ErrorCode, Message);
-}
-
-internal void
-GLFWFrameBufferResizeCallBack(GLFWwindow *Window, s32 Width, s32 Height)
-{
-	glViewport(0, 0, Width, Height);
-}
-
-internal void GLAPIENTRY
-GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length,
-		const GLchar *Message, const void *UserParam)
-{
-	printf("OpenGL Debug Callback: %s\n", Message);
-}
-
-// NOTE(Justin): Think carefully about how to recurse here. This logic does not
-// work in general
-internal void
-AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationInfo, u32 *AnimationInfoIndex)
-{
-	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
-	{
-		xml_node *Node = Root->Children[ChildIndex];
-		Assert(Node);
-		if(StringsAreSame(Node->Tag, "float_array"))
-		{
-			if(SubStringExists(Node->Attributes[0].Value, "pose_matrix-input-array"))
-			{
-				animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-				Info->TimeCount = U32FromAttributeValue(Node);
-				Info->Times = PushArray(Arena, Info->TimeCount, f32);
-				ParseF32Array(Info->Times, Info->TimeCount, Node->InnerText);
-			}
-			else if(SubStringExists(Node->Attributes[0].Value, "pose_matrix-output-array"))
-			{
-				animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-				Info->JointTransformCount = U32FromAttributeValue(Node);
-				Info->JointTransforms = PushArray(Arena, Info->JointTransformCount, f32);
-				ParseF32Array(Info->JointTransforms, Info->JointTransformCount, Node->InnerText);
-			}
-		}
-		else if(StringsAreSame(Node->Tag, "channel"))
-		{
-			xml_attribute Attr = NodeAttributeGet(Node, "target");
-			char *AtForwardSlash = strstr((char *)Attr.Value.Data, "/");
-			string JointName = StringFromRange(Attr.Value.Data, (u8 *)AtForwardSlash);
-
-			animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-			Info->JointName = StringAllocAndCopy(Arena, JointName);
-
-			(*AnimationInfoIndex)++;
-		}
-		else if(*Node->Children)
-		{
-			AnimationInfoGet(Arena, Node, AnimationInfo, AnimationInfoIndex);
-		}
-	}
-}
-
-// NOTE(Justin): What is a good return value? The indices are stored as a u32
-// but if we initialize the result to 0 and return it then the current joint
-// will think that the parent is the root joint. We could initialize a return
-// value to -1 which is an s32 then cast the s32 to a u32. Or initialize the
-// value to a large u32?
-internal s32
-JointIndexGet(string *JointNames, u32 JointNameCount, string JointName)
-{
-	s32 Result = -1;
-
-	for(u32 Index = 0; Index < JointNameCount; ++Index)
-	{
-		string *Name = JointNames + Index;
-		if(StringsAreSame(*Name, JointName))
-		{
-			Result = Index;
-			break;
-		}
-	}
-
-	return(Result);
-}
-
-// TODO(Justin): How much guarding/checking should there be?
-// TODO(Justin): Only the matrix, joint name, and parent index are retrieved
-// now. What about angle, quaternion?
-internal void
-JointsGet(memory_arena *Arena, xml_node *Root, mesh *Mesh, joint *Joints, u32 *JointIndex)
-{
-	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
-	{
-		xml_node *Node = Root->Children[ChildIndex];
-		Assert(Node);
-		if(StringsAreSame(Node->Tag, "node"))
-		{
-			joint *Joint = Joints + *JointIndex;
-
-			xml_attribute SID = NodeAttributeGet(Node, "sid");
-			xml_attribute ParentSID = NodeAttributeGet(Node->Parent, "sid");
-
-			Joint->Name = SID.Value;
-
-			s32 PoseTransformIndex = JointIndexGet(Mesh->JointNames, Mesh->JointNameCount, SID.Value);
-			s32 ParentIndex = JointIndexGet(Mesh->JointNames, Mesh->JointNameCount, ParentSID.Value);
-			Assert(PoseTransformIndex != - 1);
-			Assert(ParentIndex != - 1);
-
-			Joint->PoseTransformIndex = (u32)PoseTransformIndex;
-			Joint->ParentIndex = (u32)ParentIndex;
-
-		}
-		else if(StringsAreSame(Node->Tag, "matrix"))
-		{
-			joint *Joint = Joints + *JointIndex;
-
-			// TODO(Justin): Allocate beforehand. We know the size of each
-			// transfor 16 f32s and we know how many joints there are as well
-			Joint->LocalRestPoseTransform = PushArray(Arena, 16, f32);
-			ParseF32Array(Joint->LocalRestPoseTransform, 16, Node->InnerText);
-
-			(*JointIndex)++;
-		}
-
-		if(*Node->Children)
-		{
-			JointsGet(Arena, Node, Mesh, Joints, JointIndex);
-		}
-	}
-}
-
-internal mesh
-MeshInit(memory_arena *Arena, loaded_dae DaeFile)
-{
-	mesh Mesh = {};
-
-	xml_node *Root = DaeFile.Root;
-
-	//
-	// NOTE(Justin): Mesh/Skin info
-	//
-
-	xml_node Geometry = {};
-	xml_node NodePos = {};
-	xml_node NodeNormal = {};
-	xml_node NodeUV = {};
-	xml_node NodeIndex = {};
-
-	NodeGet(Root, &Geometry, "library_geometries");
-	NodeGet(&Geometry, &NodePos, "float_array", "mesh-positions-array");
-	NodeGet(&Geometry, &NodeNormal, "float_array", "mesh-normals-array");
-	NodeGet(&Geometry, &NodeUV, "float_array", "mesh-map-0-array");
-	NodeGet(&Geometry, &NodeIndex, "p");
-
-	u32 TriangleCount = U32FromAttributeValue(NodeIndex.Parent);
-
-	Mesh.IndicesCount = 3 * TriangleCount;
-	Mesh.PositionsCount = U32FromAttributeValue(&NodePos);
-	Mesh.NormalsCount = Mesh.PositionsCount;
-	Mesh.UVCount = 2 * (Mesh.PositionsCount / 3);
-
-	Mesh.Positions = PushArray(Arena, Mesh.PositionsCount, f32);
-	Mesh.Normals = PushArray(Arena, Mesh.NormalsCount, f32);
-	Mesh.UV = PushArray(Arena, Mesh.UVCount, f32);
-	Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
-
-	u32 IndicesCount = 3 * 3 * TriangleCount;
-	u32 *Indices = PushArray(Arena, IndicesCount, u32);
-
-	char *ContextI;
-	char *TokI = strtok_s((char *)NodeIndex.InnerText.Data, " ", &ContextI);
-
-	u32 Index = 0;
-	u32 TriIndex = 0;
-	Indices[Index++] = U32FromASCII((u8 *)TokI);
-	Mesh.Indices[TriIndex++] = U32FromASCII((u8 *)TokI);
-	while(TokI)
-	{
-		TokI = strtok_s(0, " ", &ContextI);
-		Indices[Index++] = U32FromASCII((u8 *)TokI);
-
-		TokI = strtok_s(0, " ", &ContextI);
-		Indices[Index++] = U32FromASCII((u8 *)TokI);
-
-		TokI = strtok_s(0, " ", &ContextI);
-		if(TokI)
-		{
-			Indices[Index++] = U32FromASCII((u8 *)TokI);
-			Mesh.Indices[TriIndex++] = U32FromASCII((u8 *)TokI);
-		}
-	}
-
-	u32 PositionCount = Mesh.PositionsCount;
-	f32 *Positions = PushArray(Arena, Mesh.PositionsCount, f32);
-	ParseF32Array(Positions, PositionCount, NodePos.InnerText);
-
-	u32 NormalCount = U32FromAttributeValue(&NodeNormal);
-	f32 *Normals = PushArray(Arena, NormalCount, f32);
-	ParseF32Array(Normals, NormalCount, NodeNormal.InnerText);
-
-	u32 UVCount = U32FromAttributeValue(&NodeUV);
-	f32 *UV = PushArray(Arena, UVCount, f32);
-	ParseF32Array(UV, UVCount, NodeUV.InnerText);
-
-	//
-	// NOTE(Justin): Unify indices
-	//
-
-	b32 *UniqueIndexTable = PushArray(Arena, Mesh.PositionsCount/3, b32);
-	for(u32 i = 0; i < Mesh.PositionsCount/3; ++i)
-	{
-		UniqueIndexTable[i] = true;
-	}
-
-	u32 Stride = 3;
-	u32 UVStride = 2;
-	for(u32 i = 0; i < IndicesCount; i += 3)
-	{
-		u32 IndexP = Indices[i];
-		u32 IndexN = Indices[i + 1];
-		u32 IndexUV = Indices[i + 2];
-
-		b32 IsUniqueIndex = UniqueIndexTable[IndexP];
-		if(IsUniqueIndex)
-		{
-			f32 X = Positions[Stride * IndexP];
-			f32 Y = Positions[Stride * IndexP + 1];
-			f32 Z = Positions[Stride * IndexP + 2];
-
-			f32 Nx = Normals[Stride * IndexN];
-			f32 Ny = Normals[Stride * IndexN + 1];
-			f32 Nz = Normals[Stride * IndexN + 2];
-
-			f32 U = UV[UVStride * IndexUV];
-			f32 V = UV[UVStride * IndexUV + 1];
-
-			Mesh.Positions[Stride * IndexP] = X;
-			Mesh.Positions[Stride * IndexP + 1] = Y;
-			Mesh.Positions[Stride * IndexP + 2] = Z;
-
-			Mesh.Normals[Stride * IndexP] = Nx;
-			Mesh.Normals[Stride * IndexP + 1] = Ny;
-			Mesh.Normals[Stride * IndexP + 2] = Nz;
-
-			Mesh.UV[UVStride * IndexP] = U;
-			Mesh.UV[UVStride * IndexP + 1] = V;
-
-			UniqueIndexTable[IndexP] = false;
-		}
-	}
-
-	//
-	// NOTE(Jusitn): Skeletion info
-	//
-	
-	xml_node Controllers = {};
-	NodeGet(Root, &Controllers, "library_controllers");
-	if(Controllers.ChildrenCount != 0)
-	{
-		ParseXMLStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointNameCount, "skin-joints-array");
-		ParseXMLFloatArray(Arena, &Controllers, &Mesh.RestPoseTransforms, &Mesh.RestPosTransformCount, "skin-bind_poses-array");
-		ParseXMLFloatArray(Arena, &Controllers, &Mesh.Weights, &Mesh.WeightCount, "skin-weights-array");
-
-		xml_node NodeJointCount = {};
-		NodeGet(&Controllers, &NodeJointCount, "vertex_weights");
-		u32 JointCount = U32FromAttributeValue(&NodeJointCount);
-		u32 *JointCountArray = PushArray(Arena, JointCount, u32);
-		ParseXMLU32Array(Arena, &NodeJointCount, &JointCountArray, JointCount, "vcount");
-
-		xml_node NodeJointsAndWeights = {};
-		NodeGet(&Controllers, &NodeJointsAndWeights, "v");
-
-		u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointCount);
-		u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
-		ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
-
-		Mesh.JointInfoCount = JointCount;
-		Mesh.JointsInfo = PushArray(Arena, Mesh.JointInfoCount, joint_info);
-
-		// TODO(Justin): Models could have many joints that affect a single vertex and this must be handled.
-		u32 JointsAndWeightsIndex = 0;
-		for(u32 JointIndex = 0; JointIndex < Mesh.JointInfoCount; ++JointIndex)
-		{
-			u32 JointCountForVertex = JointCountArray[JointIndex];
-
-			joint_info *JointInfo = Mesh.JointsInfo + JointIndex;
-			JointInfo->Count = JointCountForVertex;
-			for(u32 k = 0; k < JointInfo->Count; ++k)
-			{
-				JointInfo->JointIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
-				JointInfo->WeightIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
-			}
-		}
-	}
-
-	//
-	// NOTE(Justin): Animations
-	//
-
-	xml_node LibAnimations = {};
-	NodeGet(Root, &LibAnimations, "library_animations");
-	if(LibAnimations.ChildrenCount != 0)
-	{
-		xml_node *AnimRoot = LibAnimations.Children[0];
-
-		Mesh.AnimationInfoCount = AnimRoot->ChildrenCount;
-		Mesh.AnimationsInfo = PushArray(Arena, Mesh.AnimationInfoCount, animation_info);
-
-		animation_info *Info = Mesh.AnimationsInfo;
-		u32 AnimationInfoIndex = 0;
-
-		AnimationInfoGet(Arena, AnimRoot, Info, &AnimationInfoIndex);
-		Assert(AnimationInfoIndex == Mesh.AnimationInfoCount);
-	}
-
-	//
-	// NOTE(Justin): Visual Scenes (but only joint tree)
-	//
-
-	xml_node LibVisScenes = {};
-	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
-
-	xml_node Skeleton = {};
-	NodeGet(Root, &Skeleton, "skeleton");
-	if(LibVisScenes.ChildrenCount != 0)
-	{
-		Mesh.JointCount = Mesh.JointNameCount;
-		Mesh.Joints = PushArray(Arena, Mesh.JointCount, joint);
-
-		xml_node JointRoot = {};
-		FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
-		if(JointRoot.ChildrenCount != 0)
-		{
-			u32 JointIndex = 0;
-			joint *Joints = Mesh.Joints;
-
-			Joints->Name = Mesh.JointNames[0];
-			Joints->ParentIndex = -1;
-
-			JointsGet(Arena, &JointRoot, &Mesh, Joints, &JointIndex);
-		}
-	}
-
-	return(Mesh);
-}
-
-internal void
-GLVbInitAndPopulate(u32 *VB, u32 VA, u32 Index, u32 ComponentCount, f32 *BufferData, u32 TotalCount)
-{
-	glGenBuffers(1, VB);
-	glBindVertexArray(VA);
-	glBindBuffer(GL_ARRAY_BUFFER, *VB);
-	glBufferData(GL_ARRAY_BUFFER, TotalCount * sizeof(f32), BufferData, GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(Index);
-	glVertexAttribPointer(Index, ComponentCount, GL_FLOAT, GL_FALSE, 0, (void *)0);
-}
-
-internal void
-GLIBOInit(u32 *IBO, u32 *Indices, u32 IndicesCount)
-{
-	glGenBuffers(1, IBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *IBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndicesCount * sizeof(u32), Indices, GL_STATIC_DRAW);
-}
-
-internal u32
-GLProgramCreate(char *VS, char *FS)
-{
-	u32 VSHandle;
-	u32 FSHandle;
-
-	VSHandle = glCreateShader(GL_VERTEX_SHADER);
-	FSHandle = glCreateShader(GL_FRAGMENT_SHADER);
-
-	glShaderSource(VSHandle, 1, &VS, 0);
-	glShaderSource(FSHandle, 1, &FS, 0);
-
-	b32 VSIsValid = false;
-	b32 FSIsValid = false;
-	char Buffer[512];
-
-	glCompileShader(VSHandle);
-	glGetShaderiv(VSHandle, GL_COMPILE_STATUS, &VSIsValid);
-	if(!VSIsValid)
-	{
-		glGetShaderInfoLog(VSHandle, 512, 0, Buffer);
-		printf("ERROR: Vertex Shader Compile Failed\n %s", Buffer);
-	}
-
-	glCompileShader(FSHandle);
-	glGetShaderiv(FSHandle, GL_COMPILE_STATUS, &FSIsValid);
-	if(!FSIsValid)
-	{
-		glGetShaderInfoLog(FSHandle, 512, 0, Buffer);
-		printf("ERROR: Fragment Shader Compile Failed\n %s", Buffer);
-	}
-
-	u32 Program;
-	Program = glCreateProgram();
-	glAttachShader(Program, VSHandle);
-	glAttachShader(Program, FSHandle);
-	glLinkProgram(Program);
-	glValidateProgram(Program);
-
-	b32 ProgramIsValid = false;
-	glGetProgramiv(Program, GL_LINK_STATUS, &ProgramIsValid);
-	if(!ProgramIsValid)
-	{
-		glGetProgramInfoLog(Program, 512, 0, Buffer);
-		printf("ERROR: Program link failed\n %s", Buffer);
-	}
-
-	glDeleteShader(VSHandle);
-	glDeleteShader(FSHandle);
-
-	u32 Result = Program;
-
-	return(Result);
-}
-
-internal void
-UniformMatrixSet(u32 ShaderProgram, char *UniformName, mat4 M)
-{
-	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
-	glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &M.E[0][0]);
-}
-
-internal void
-UniformV3Set(u32 ShaderProgram, char *UniformName, v3 V)
-{
-	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
-	glUniform3fv(UniformLocation, 1, &V.E[0]);
-}
-
-internal void
-AttributesInterleave(f32 *BufferData, mesh *Mesh)
-{
-	u32 BufferIndex = 0;
-
-	u32 Stride = 3;
-	u32 UVStride = 2;
-	for(u32 Index = 0; Index < Mesh->PositionsCount/3; ++Index)
-	{
-		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index];
-		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index + 1];
-		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index + 2];
-
-		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index];
-		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index + 1];
-		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index + 2];
-
-		BufferData[BufferIndex++] = Mesh->UV[UVStride * Index];
-		BufferData[BufferIndex++] = Mesh->UV[UVStride * Index + 1];
-	}
-}
-
-
-
 int main(int Argc, char **Argv)
 {
 	void *Memory = calloc(Megabyte(1), sizeof(u8));
@@ -875,7 +330,7 @@ int main(int Argc, char **Argv)
 	glfwSetErrorCallback(GLFWErrorCallback);
 	if(glfwInit())
 	{
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		glfwWindowHint(GLFW_SAMPLES, 4);
@@ -891,6 +346,7 @@ int main(int Argc, char **Argv)
 			glfwMakeContextCurrent(Window.Handle);
 			glfwSetInputMode(Window.Handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
+			glewExperimental = GL_TRUE;
 			if(glewInit() == GLEW_OK)
 			{
 				loaded_dae CubeDae = ColladaFileLoad(Arena, "..\\data\\thingamajig.dae");
@@ -961,20 +417,44 @@ int main(int Argc, char **Argv)
 				GLVbInitAndPopulate(&NormVB, VA, 1, COMPONENT_COUNT_N, Cube.Normals, Cube.NormalsCount);
 				GLVbInitAndPopulate(&TexVB, VA, 2, COMPONENT_COUNT_UV, Cube.UV, Cube.UVCount);
 
+//				u32 JointInfoVB;
+//				glGenBuffers(GL_ARRAY_BUFFER, &JointInfoVB);
+//				glBindVertexArray(VA);
+//				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB);
+//				glBufferData(GL_ARRAY_BUFFER, Cube.JointInfoCount * sizeof(joint_info), Cube.JointsInfo, GL_STATIC_DRAW);
+//
+//				glVertexAttribPointer(3, 1, GL_UNSIGNED_INT, GL_FALSE, sizeof(joint_info), (void *)0);
+//				glVertexAttribPointer(4, 3, GL_UNSIGNED_INT, GL_FALSE, sizeof(joint_info), (void *)(sizeof(u32)));
+//				glVertexAttribPointer(5, 3, GL_UNSIGNED_INT, GL_FALSE, sizeof(joint_info), (void *)(4 * sizeof(u32)));
+//
 				GLIBOInit(&IBO, Cube.Indices, Cube.IndicesCount);
 #endif
-
 				glUseProgram(ShaderProgram);
 				UniformMatrixSet(ShaderProgram, "Model", ModelTransform);
 				UniformMatrixSet(ShaderProgram, "View", CameraTransform);
 				UniformMatrixSet(ShaderProgram, "Projection", PerspectiveTransform);
 				UniformV3Set(ShaderProgram, "Color", Color);
 
+				animation_info *AnimInfo = Cube.AnimationsInfo;
+
+				f32 AnimationCurrentTime = 0.0f;
+				f32 AnimationEndTime = AnimInfo->Times[AnimInfo->TimeCount - 1];
+
 				f32 DtForFrame = 0.0f;
 				f32 StartTime = 0.0f;
 				f32 EndTime = 0.0f;
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
+					AnimationCurrentTime += 0.01f;
+					if(AnimationCurrentTime > AnimationEndTime)
+					{
+						AnimationCurrentTime = 0.0f;
+					}
+
+					// TODO(Update trasforms?)
+					// Send uniforms
+					// Draw
+
 					StartTime = (f32)glfwGetTime();
 
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
