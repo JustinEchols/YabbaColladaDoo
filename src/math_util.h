@@ -310,9 +310,9 @@ Mat4YRotation(f32 Angle)
 {
 	mat4 R = 
 	{
-		{{cosf(Angle), 0.0f, sinf(Angle), 0.0f},
+		{{-sinf(Angle), 0.0f, cosf(Angle), 0.0f},
 		 {0.0f, 1.0f, 0.0f, 0.0f},
-		 {-sinf(Angle), 0.0f, cosf(Angle), 1.0f},
+		 {cosf(Angle), 0.0f, sinf(Angle), 1.0f},
 		 {0.0f, 0.0f, 0.0f, 1.0f}}
 	};
 
