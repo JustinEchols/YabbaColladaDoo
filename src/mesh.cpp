@@ -271,7 +271,8 @@ MeshInit(memory_arena *Arena, loaded_dae DaeFile)
 			for(u32 k = 0; k < JointInfo->Count; ++k)
 			{
 				JointInfo->JointIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
-				JointInfo->WeightIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
+				u32 WeightIndex = JointsAndWeights[JointsAndWeightsIndex++];
+				JointInfo->Weights[k] = Mesh.Weights[WeightIndex];
 			}
 		}
 	}
