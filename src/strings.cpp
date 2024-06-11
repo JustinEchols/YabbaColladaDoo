@@ -113,17 +113,20 @@ F32FromASCII(u8 *S)
 internal void
 ParseU32Array(u32 *Dest, u32 DestCount, string Str)
 {
-	Assert(Dest);
-
-	char *Context;
-	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
-	Dest[0] = U32FromASCII((u8 *)Tok);
-	for(u32 Index = 1; Index < DestCount; ++Index)
+	if(DestCount != 0)
 	{
-		Tok = strtok_s(0, " ", &Context);
-		if(Tok)
+		Assert(Dest);
+
+		char *Context;
+		char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+		Dest[0] = U32FromASCII((u8 *)Tok);
+		for(u32 Index = 1; Index < DestCount; ++Index)
 		{
-			Dest[Index] = U32FromASCII((u8 *)Tok);
+			Tok = strtok_s(0, " ", &Context);
+			if(Tok)
+			{
+				Dest[Index] = U32FromASCII((u8 *)Tok);
+			}
 		}
 	}
 }
@@ -131,17 +134,20 @@ ParseU32Array(u32 *Dest, u32 DestCount, string Str)
 internal void
 ParseF32Array(f32 *Dest, u32 DestCount, string Str)
 {
-	Assert(Dest);
-
-	char *Context;
-	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
-	Dest[0] = F32FromASCII((u8 *)Tok);
-	for(u32 Index = 1; Index < DestCount; ++Index)
+	if(DestCount != 0)
 	{
-		Tok = strtok_s(0, " ", &Context);
-		if(Tok)
+		Assert(Dest);
+
+		char *Context;
+		char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+		Dest[0] = F32FromASCII((u8 *)Tok);
+		for(u32 Index = 1; Index < DestCount; ++Index)
 		{
-			Dest[Index] = F32FromASCII((u8 *)Tok);
+			Tok = strtok_s(0, " ", &Context);
+			if(Tok)
+			{
+				Dest[Index] = F32FromASCII((u8 *)Tok);
+			}
 		}
 	}
 }

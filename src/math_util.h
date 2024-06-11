@@ -44,6 +44,14 @@ struct mat4
 	f32 E[4][4];
 };
 
+struct basis
+{
+	v3 O;
+	v3 X;
+	v3 Y;
+	v3 Z;
+};
+
 inline v2
 V2(f32 X, f32 Y)
 {
@@ -272,6 +280,29 @@ Mat4TransposeMat3(mat4 T)
 	return(R);
 }
 
+internal mat4
+Mat4Transpose(mat4 T)
+{
+	mat4 R = T;
+
+	for(s32 i = 0; i < 4; ++i)
+	{
+		for(s32 j = 0; j < 4; ++j)
+		{
+			if((i != j) && (i < j))
+			{
+				f32 Temp =  R.E[j][i];
+				R.E[j][i] = R.E[i][j];
+				R.E[i][j] = Temp;
+			}
+		}
+	}
+
+	return(R);
+}
+
+
+
 inline v3
 operator*(mat4 T, v3 V)
 {
@@ -314,6 +345,20 @@ Mat4YRotation(f32 Angle)
 		 {0.0f, 1.0f, 0.0f, 0.0f},
 		 {cosf(Angle), 0.0f, sinf(Angle), 1.0f},
 		 {0.0f, 0.0f, 0.0f, 1.0f}}
+	};
+
+	return(R);
+}
+
+internal mat4
+ModelTransformFromBasis(basis *B)
+{
+	mat4 R =
+	{
+		{{B->X.x, B->Y.x, B->Z.x, B->O.x},
+		 {B->X.y, B->Y.y, B->Z.y, B->O.y},
+		 {B->X.z, B->Y.z, B->Z.z, B->O.z},
+		 {0,0,0,1}}
 	};
 
 	return(R);

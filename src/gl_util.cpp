@@ -101,17 +101,39 @@ GLProgramCreate(char *VS, char *FS)
 }
 
 internal void
-UniformMatrixSet(u32 ShaderProgram, char *UniformName, mat4 M)
+UniformU32Set(u32 ShaderProgram, char *UniformName, u32 U32)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
-	glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &M.E[0][0]);
+	glUniform1ui(UniformLocation, U32);
 }
+
+internal void
+UniformF32Set(u32 ShaderProgram, char *UniformName, f32 F32)
+{
+	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	glUniform1f(UniformLocation, F32);
+}
+
 
 internal void
 UniformV3Set(u32 ShaderProgram, char *UniformName, v3 V)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
 	glUniform3fv(UniformLocation, 1, &V.E[0]);
+}
+
+internal void
+UniformMatrixArraySet(u32 ShaderProgram, char *UniformName, mat4 *M, u32 Count)
+{
+	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	glUniformMatrix4fv(UniformLocation, Count, GL_TRUE, &M->E[0][0]);
+}
+
+internal void
+UniformMatrixSet(u32 ShaderProgram, char *UniformName, mat4 M)
+{
+	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &M.E[0][0]);
 }
 
 internal void
