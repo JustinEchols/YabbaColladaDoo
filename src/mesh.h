@@ -83,6 +83,7 @@ struct mesh
 	joint *Joints;
 	joint_info *JointsInfo;
 
+	mat4 *BindTransform;
 	mat4 *InvBindTransforms;
 	mat4 *JointTransforms;
 	mat4 *ModelSpaceTransforms;

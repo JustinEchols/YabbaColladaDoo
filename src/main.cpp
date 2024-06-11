@@ -144,6 +144,12 @@ U32ArraySum(u32 *A, u32 Count)
 // WARNING(Justin): The max loop count must be a CONSTANT we cannot pass the
 // joint count in and use it to cap the number of iterations of a loop.
 
+// NOTE(Justin): ALOT of time was spent figuring out why the model was not being
+// rendered correctly. Ultimately it had to do with setting the matrix array of
+// model space (joint transforms) transforms. For some reason this is not
+// working correctly and the work around is setting two uniforms individually. This
+// is the reason why there are two uniforms J1 and J2 in the vertex shader.
+
 char *BasicVsSrc = R"(
 #version 430 core
 layout (location = 0) in vec3 P;
@@ -179,7 +185,6 @@ void main()
 			float W = Weights[i];
 			if(JIndex == 0)
 			{
-				
 				Pos += W * J1 * vec4(P, 1.0);
 			}
 			else
@@ -190,8 +195,6 @@ void main()
 	}
 
 	gl_Position = Projection * View * Model * Pos;
-	//gl_Position = Projection * View * Model * SkeletalTransform * vec4(P, 1.0);
-	//gl_Position = Projection * View * Model * vec4(P, 1.0);
 })";
 
 char *BasicFsSrc = R"(
@@ -506,13 +509,7 @@ int main(int Argc, char **Argv)
 #if 1
 					if(Mesh.JointInfoCount != 0)
 					{
-						mat4 Bind = 
-						{
-							{{1,0,0,0},
-							 {0,0,1,0},
-							 {0,-1,0,0},
-							 {0,0,0,1}}
-						};
+						mat4 Bind = *Mesh.BindTransform;
 
 						mat4 RootJointT = *Mesh.Joints[0].Transform;
 						mat4 RootInvBind = Mesh.InvBindTransforms[0];
@@ -530,10 +527,8 @@ int main(int Argc, char **Argv)
 							// NOTE(Justin): The line below puts the mesh into the articulated pose
 							//Mesh.ModelSpaceTransforms[Joint->Index] = *Joint->Transform * InvBind * Bind;
 
-
 							// NOTE(Justin): The line below puts the mesh into bind/t/rest pose
 							Mesh.ModelSpaceTransforms[Index] = JointTransform * InvBind * Bind;
-
 						}
 					}
 #endif

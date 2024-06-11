@@ -318,6 +318,12 @@ MeshInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(Root, &Controllers, "library_controllers");
 	if(Controllers.ChildrenCount != 0)
 	{
+		Mesh.BindTransform = PushArray(Arena, 1, mat4);
+
+		xml_node BindShape = {};
+		NodeGet(&Controllers, &BindShape, "bind_shape_matrix");
+		ParseF32Array((f32 *)Mesh.BindTransform, 16, BindShape.InnerText);
+		
 		ParseColladaStringArray(Arena, &Controllers, &Mesh.JointNames, &Mesh.JointCount);
 
 		Assert(Mesh.JointNames);
