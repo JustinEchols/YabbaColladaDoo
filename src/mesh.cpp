@@ -451,31 +451,3 @@ MeshInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 	return(Mesh);
 }
-
-#if 0
-internal void
-MeshBindPose(mesh *Mesh)
-{
-	mat4 RootJointT = *Mesh->Joints[0].Transform;
-	mat4 RootInvBind = Mesh->InvBindTransforms[0];
-	Mesh->ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
-	for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
-	{
-		joint *Joint = Mesh.Joints + Index;
-
-		mat4 ParentTransform = *Mesh.Joints[Joint->ParentIndex].Transform;
-		mat4 JointTransform = *Joint->Transform;
-
-		JointTransform = ParentTransform * JointTransform;
-		mat4 InvBind = Mesh.InvBindTransforms[Index];
-
-		// NOTE(Justin): The line below puts the mesh into the articulated pose
-		//Mesh.ModelSpaceTransforms[Joint->Index] = *Joint->Transform * InvBind * Bind;
-
-
-		// NOTE(Justin): The line below puts the mesh into bind/t/rest pose
-		Mesh.ModelSpaceTransforms[Index] = JointTransform * InvBind * Bind;
-
-	}
-}
-#endif
