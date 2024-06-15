@@ -157,7 +157,7 @@ uniform mat4 View;
 uniform mat4 Projection;
 
 #define MAX_JOINT_COUNT 5
-uniform mat4 Transforms[5];
+uniform mat4 Transforms[20];
 
 out vec4 WeightPaint;
 out vec3 N;
@@ -385,7 +385,7 @@ int main(int Argc, char **Argv)
 			glewExperimental = GL_TRUE;
 			if(glewInit() == GLEW_OK)
 			{
-				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\RiggedSimple.dae");
+				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\thingamajig.dae");
 
 				mesh Mesh = MeshInitFromCollada(Arena, MeshDae);
 
@@ -516,17 +516,22 @@ int main(int Argc, char **Argv)
 
 						mat4 RootJointT = *Mesh.Joints[0].Transform;
 						mat4 RootInvBind = Mesh.InvBindTransforms[0];
+
+						Mesh.JointTransforms[0] = RootJointT;
 						Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
 						for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
 						{
 							joint *Joint = Mesh.Joints + Index;
 
-							mat4 ParentTransform = *Mesh.Joints[Joint->ParentIndex].Transform;
+							mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
+							//mat4 ParentTransform = *Mesh.Joints[Joint->ParentIndex].Transform;
 							mat4 JointTransform = *Joint->Transform;
 
 							JointTransform = ParentTransform * JointTransform;
+
 							mat4 InvBind = Mesh.InvBindTransforms[Index];
 
+							Mesh.JointTransforms[Index] = JointTransform;
 							Mesh.ModelSpaceTransforms[Index] = JointTransform * InvBind * Bind;
 						}
 					}
@@ -536,8 +541,6 @@ int main(int Argc, char **Argv)
 
 					glUseProgram(ShaderProgram);
 
-					//UniformMatrixSet(ShaderProgram, "J1", Mesh.ModelSpaceTransforms[0]);
-					//UniformMatrixSet(ShaderProgram, "J2", Mesh.ModelSpaceTransforms[1]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh.ModelSpaceTransforms, Mesh.JointCount);
 
 					glDrawElements(GL_TRIANGLES, Mesh.IndicesCount, GL_UNSIGNED_INT, 0);
