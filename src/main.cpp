@@ -284,10 +284,10 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				Result.Root = PushXMLNode(Arena, 0);
 				xml_node *CurrentNode = Result.Root;
 
-				CurrentNode->Tag = Token->String;
+				CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
 
 				Token = Token->Next;
-				CurrentNode->InnerText = Token->String;
+				CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 
 				while(Token->Next)
 				{
