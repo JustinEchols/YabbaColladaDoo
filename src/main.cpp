@@ -194,7 +194,6 @@ uniform vec3 Color;
 out vec4 Result;
 void main()
 {
-	//Result = WeightPaint * vec4(Color, 1.0);
 	Result = WeightPaint + 0.1f * vec4(N, 1.0);
 })";
 
