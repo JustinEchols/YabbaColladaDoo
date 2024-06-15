@@ -159,9 +159,6 @@ uniform mat4 Projection;
 #define MAX_JOINT_COUNT 5
 uniform mat4 Transforms[5];
 
-uniform mat4 J1;
-uniform mat4 J2;
-
 out vec4 WeightPaint;
 out vec3 N;
 
