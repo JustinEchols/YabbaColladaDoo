@@ -1,4 +1,4 @@
-#if !defined(BASE_MATH_H)
+#if !defined(MATH_UTIL_H)
 
 union v2
 {
@@ -398,5 +398,5 @@ Mat4Perspective(f32 FOV, f32 AspectRatio, f32 ZNear, f32 ZFar)
 	return(R);
 }
 
-#define BASE_MATH_H
+#define MATH_UTIL_H 
 #endif
