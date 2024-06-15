@@ -29,12 +29,11 @@ internal void
 GLVbInitAndPopulate(u32 *VB, u32 VA, u32 Index, u32 ComponentCount, f32 *BufferData, u32 TotalCount)
 {
 	glGenBuffers(1, VB);
-	glBindVertexArray(VA);
 	glBindBuffer(GL_ARRAY_BUFFER, *VB);
 	glBufferData(GL_ARRAY_BUFFER, TotalCount * sizeof(f32), BufferData, GL_STATIC_DRAW);
 
-	glEnableVertexAttribArray(Index);
 	glVertexAttribPointer(Index, ComponentCount, GL_FLOAT, GL_FALSE, 0, (void *)0);
+	glEnableVertexAttribArray(Index);
 }
 
 internal void
@@ -126,7 +125,7 @@ internal void
 UniformMatrixArraySet(u32 ShaderProgram, char *UniformName, mat4 *M, u32 Count)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
-	glUniformMatrix4fv(UniformLocation, Count, GL_TRUE, &M->E[0][0]);
+	glUniformMatrix4fv(UniformLocation, Count, GL_TRUE, &M[0].E[0][0]);
 }
 
 internal void
