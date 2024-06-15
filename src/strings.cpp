@@ -89,6 +89,63 @@ SubStringExists(string HayStack, char *Needle)
 	return(Result);
 }
 
+internal void
+StringListPushExplicit(string_list *List, string String, string_node *Node)
+{
+	Node->String = String;
+	SLLQueuePush(List->First, List->Last, Node);
+	List->Count += 1;
+	List->Size += String.Size;
+}
+
+internal void
+StringListPush(memory_arena *Arena, string_list *List, string String)
+{
+	string_node *Node = PushArray(Arena, 1, string_node);
+	StringListPushExplicit(List, String, Node);
+}
+
+internal string_list
+StringSplit(memory_arena *Arena, string String, u8 *Splits, u32 Count)
+{
+	string_list Result = {};
+
+	u8 *At = String.Data;
+	u8 *FirstWord = String.Data;
+	u8 *OnePastLast = String.Data + String.Size;
+	for(; At < OnePastLast; ++At)
+	{
+		u8 Byte = *At;
+		b32 ShouldSplit = false;
+		for(u32 Index = 0; Index < Count; ++Index)
+		{
+			if(Byte == Splits[Index])
+			{
+				ShouldSplit = true;
+				break;
+			}
+		}
+
+		if(ShouldSplit)
+		{
+			if(FirstWord < At)
+			{
+				StringListPush(Arena, &Result, StringFromRange(FirstWord, At));
+			}
+
+			FirstWord = At + 1;
+		}
+	}
+
+	if(FirstWord < At)
+	{
+		StringListPush(Arena, &Result, StringFromRange(FirstWord, At));
+	}
+
+	return(Result);
+}
+
+
 inline s32
 S32FromASCII(u8 *S)
 {

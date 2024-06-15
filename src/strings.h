@@ -1,4 +1,4 @@
-#if !defined(BASE_STRINGS_H)
+#if !defined(STRINGS_H)
 
 struct string
 {
@@ -6,5 +6,19 @@ struct string
 	u64 Size;
 };
 
-#define BASE_STRINGS_H
+struct string_node
+{
+	string_node *Next;
+	string String;
+};
+
+struct string_list
+{
+	string_node *First;
+	string_node *Last;
+	u64 Count;
+	u64 Size;
+};
+
+#define STRINGS_H
 #endif
