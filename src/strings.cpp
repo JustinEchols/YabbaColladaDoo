@@ -89,6 +89,26 @@ SubStringExists(string HayStack, char *Needle)
 	return(Result);
 }
 
+internal string
+StringSearchFor(string S, char C)
+{
+	u8 *P = S.Data;
+	u8 PC = (u8)C;
+	for(u32 Index = 0; Index < S.Size; Index++)
+	{
+		P++;
+		if(*P == PC)
+		{
+			break;
+		}
+	}
+
+	string Result = StringFromRange(P, S.Data + S.Size);
+
+	return(Result);
+
+}
+
 internal void
 StringListPushExplicit(string_list *List, string String, string_node *Node)
 {
