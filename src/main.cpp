@@ -144,12 +144,6 @@ U32ArraySum(u32 *A, u32 Count)
 // WARNING(Justin): The max loop count must be a CONSTANT we cannot pass the
 // joint count in and use it to cap the number of iterations of a loop.
 
-// NOTE(Justin): ALOT of time was spent figuring out why the model was not being
-// rendered correctly. Ultimately it had to do with setting the matrix array of
-// model space (joint transforms) transforms. For some reason this is not
-// working correctly and the work around is setting two uniforms individually. This
-// is the reason why there are two uniforms J1 and J2 in the vertex shader.
-
 char *BasicVsSrc = R"(
 #version 430 core
 layout (location = 0) in vec3 P;
