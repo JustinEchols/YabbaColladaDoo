@@ -275,44 +275,29 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				char TagDelimeters[] = "<>";
 				char InnerTagDelimeters[] = "=\"";
 
-				char *Context1 = 0;
-				char *Context2 = 0;
-
 				string Data = String((u8 *)(Content + Index));
-				char *Delimeters = "<>";
-				string_list List = StringSplit(Arena, Data, (u8 *)Delimeters, 2);
+				string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, 2);
 
-				string_node *T = List.First;
-				T = T->Next;
+				string_node *Token = List.First;
+				Token = Token->Next;
 
 				Result.Root = PushXMLNode(Arena, 0);
 				xml_node *CurrentNode = Result.Root;
 
-				CurrentNode->Tag = T->String;
-				T = T->Next;
-				//Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-				CurrentNode->InnerText = T->String;
-#if 1
-				string Token = String((u8 *)strtok_s((char *)(Content + Index), TagDelimeters, &Context1));
-				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+				CurrentNode->Tag = Token->String;
 
+				Token = Token->Next;
+				CurrentNode->InnerText = Token->String;
 
-
-				CurrentNode->Tag = Token;
-				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-				CurrentNode->InnerText = Token;
-#endif
-
-
-				while(Token.Data)
+				while(Token->Next)
 				{
-					Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-					if(Token.Data[0] == '/')
+					Token = Token->Next;
+					if(Token->String.Data[0] == '/')
 					{
 						if(CurrentNode->Parent)
 						{
 							CurrentNode = CurrentNode->Parent;
-							Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+							Token = Token->Next;
 						}
 						else
 						{
@@ -323,62 +308,51 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 					{
 						CurrentNode = ChildNodeAdd(Arena, CurrentNode);
 
-						if(NodeHasKeysValues(Token) && StringEndsWith(Token, '/'))
+						if(NodeHasKeysValues(Token->String) && StringEndsWith(Token->String, '/'))
 						{
-							string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
+							string AtSpace = StringSearchFor(Token->String, ' ');
+							u64 CopySize = (Token->String.Size - AtSpace.Size);
+							string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
+							CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
 
-							CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
-							CurrentNode->Tag.Data = PushArray(Arena, CurrentNode->Tag.Size + 1, u8);
+							string Temp = AtSpace;
+							Temp.Data++;
+							Temp.Size--;
 
-							ArrayCopy(CurrentNode->Tag.Size, Token.Data, CurrentNode->Tag.Data);
-							CurrentNode->Tag.Data[CurrentNode->Tag.Size] = '\0';
+							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, 2);
 
-							string Temp = {};
-							Temp.Size = AtSpace.Size - 1;
-							Temp.Data = PushArray(Arena, Temp.Size + 1, u8);
-							ArrayCopy(Temp.Size, (AtSpace.Data + 1), Temp.Data);
-							Temp.Data[Temp.Size] = '\0';
-
-							NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
-
-							Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-							CurrentNode->InnerText = Token;
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 							CurrentNode = CurrentNode->Parent;
 						}
-						else if(NodeHasKeysValues(Token))
+						else if(NodeHasKeysValues(Token->String))
 						{
-							string AtSpace = String((u8 *)strstr((char *)Token.Data, " "));
+							string AtSpace = StringSearchFor(Token->String, ' ');
+							u64 CopySize = (Token->String.Size - AtSpace.Size);
+							string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
+							CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
 
-							CurrentNode->Tag.Size = (Token.Size - AtSpace.Size);
-							CurrentNode->Tag.Data = PushArray(Arena, CurrentNode->Tag.Size + 1, u8);
+							string Temp = AtSpace;
+							Temp.Data++;
+							Temp.Size--;
 
-							ArrayCopy(CurrentNode->Tag.Size, Token.Data, CurrentNode->Tag.Data);
-							CurrentNode->Tag.Data[CurrentNode->Tag.Size] = '\0';
+							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, 2);
 
-							string Temp = {};
-							Temp.Size = AtSpace.Size - 1;
-							Temp.Data = PushArray(Arena, Temp.Size + 1, u8);
-							ArrayCopy(Temp.Size, (AtSpace.Data + 1), Temp.Data);
-							Temp.Data[Temp.Size] = '\0';
-
-							NodeProcessKeysValues(Arena, CurrentNode, Temp, Context2, InnerTagDelimeters);
-
-							Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-							CurrentNode->InnerText = Token;
-
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 						}
-						else if(StringEndsWith(Token, '/'))
+						else if(StringEndsWith(Token->String, '/'))
 						{
-							CurrentNode->Tag = Token;
-							Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-							CurrentNode->InnerText = Token;
+							CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 							CurrentNode = CurrentNode->Parent;
 						}
 						else
 						{
-							CurrentNode->Tag = Token;
-							Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
-							CurrentNode->InnerText = Token;
+							CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 						}
 					}
 				}
