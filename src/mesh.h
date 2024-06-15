@@ -10,11 +10,8 @@ struct joint_info
 struct joint
 {
 	string Name;
-
 	s32 ParentIndex;
-
 	s32 Index;
-
 	mat4 *Transform;
 };
 
@@ -29,6 +26,14 @@ struct animation_info
 
 	u32 TransformCount;
 	mat4 *AnimationTransforms;
+};
+
+struct animation
+{
+	string Name;
+	f32 CurrentTime;
+	u32 KeyFrameIndex;
+	animation_info Info;
 };
 
 // NOTE(Justin): Vertex data in 1-1 correspondence is
@@ -47,8 +52,6 @@ struct animation_info
 
 struct mesh
 {
-	basis Basis;
-
 	u32 PositionsCount;
 	u32 NormalsCount;
 	u32 UVCount;
@@ -75,6 +78,14 @@ struct mesh
 	mat4 *ModelSpaceTransforms;
 
 	animation_info *AnimationsInfo;
+};
+
+struct model
+{
+	basis Basis;
+
+	u32 MeshCount;
+	mesh *Meshes;
 };
 
 #define MESH_H
