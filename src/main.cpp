@@ -21,9 +21,11 @@
 	[] Handle meshes with materials
  [] Skeleton initialization
 	[] Library Controllers done in one tree traversal
-	[] Skeletal animation transforms
+	[X] Skeletal animation transforms
 	[X] Library Animations done in one tree traversal
 	[] Normalize weights so that they are a convex combination
+	[] Instead of storing mat4's for animation, store pos, quat, scale and construct mat4's
+	[] Lerp between key frames using pos, quat, and scale.
  [] Write model data to simple file format (mesh/animation/material)
  [] How to determine the skeleton? Instance controller and skeleton node however there can exist more than one
 	skeleton in a collada file.
@@ -48,11 +50,22 @@
 #define DegreeToRad(Degrees) ((Degrees) * (PI32 / 180.0f))
 
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
-#define COLLADA_NODE_CHILDREN_MAX_COUNT 50
+#define COLLADA_NODE_CHILDREN_MAX_COUNT 75
 
 #define COMPONENT_COUNT_V3 3
 #define COMPONENT_COUNT_N 3
 #define COMPONENT_COUNT_UV 2
+
+#define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
+#define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
+#define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
+
+#define SLLQueuePush_N(First,Last,Node,Next) (((First)==0?\
+(First)=(Last)=(Node):\
+((Last)->Next=(Node),(Last)=(Node))),\
+(Node)->Next=0)
+#define SLLQueuePush(First,Last,Node) SLLQueuePush_N(First,Last,Node,Next)
+
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -87,8 +100,7 @@ ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
 	Arena->Used = 0;
 }
 
-#define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
-#define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
+
 internal void *
 PushSize_(memory_arena *Arena, memory_index Size)
 {
@@ -100,7 +112,7 @@ PushSize_(memory_arena *Arena, memory_index Size)
 	return(Result);
 }
 
-#define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
+
 internal void *
 MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 {
@@ -143,6 +155,13 @@ U32ArraySum(u32 *A, u32 Count)
 
 // WARNING(Justin): The max loop count must be a CONSTANT we cannot pass the
 // joint count in and use it to cap the number of iterations of a loop.
+
+// WARNING(Justin): If the compiler and linker determines that an attribute is
+// not used IT WILL OPTIMIZE IT OUT OF THE PIPELINE AND CHAOS ENSUES.
+// To detect this, everytime an attribute is initialized a counter can be
+// incremented. After initializing all attributes use glGetProgramiv with
+// GL_ACTIVE_ATTRIBUTES and ASSERT that the return value is equal to the
+// counter.
 
 char *BasicVsSrc = R"(
 #version 430 core
@@ -259,15 +278,31 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				char *Context1 = 0;
 				char *Context2 = 0;
 
-				string Token = String((u8 *)strtok_s((char *)(Content + Index), TagDelimeters, &Context1));
-				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+				string Data = String((u8 *)(Content + Index));
+				char *Delimeters = "<>";
+				string_list List = StringSplit(Arena, Data, (u8 *)Delimeters, 2);
+
+				string_node *T = List.First;
+				T = T->Next;
 
 				Result.Root = PushXMLNode(Arena, 0);
 				xml_node *CurrentNode = Result.Root;
 
+				CurrentNode->Tag = T->String;
+				T = T->Next;
+				//Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+				CurrentNode->InnerText = T->String;
+#if 1
+				string Token = String((u8 *)strtok_s((char *)(Content + Index), TagDelimeters, &Context1));
+				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
+
+
+
 				CurrentNode->Tag = Token;
 				Token = String((u8 *)strtok_s(0, TagDelimeters, &Context1));
 				CurrentNode->InnerText = Token;
+#endif
+
 
 				while(Token.Data)
 				{
@@ -357,10 +392,10 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 int main(int Argc, char **Argv)
 {
-	void *Memory = calloc(Megabyte(1), sizeof(u8));
+	void *Memory = calloc(Megabyte(256), sizeof(u8));
 
 	memory_arena Arena_;
-	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(1));
+	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(256));
 	memory_arena *Arena = &Arena_;
 
 	glfwSetErrorCallback(GLFWErrorCallback);
@@ -393,10 +428,14 @@ int main(int Argc, char **Argv)
 
 				mesh Mesh = MeshInitFromCollada(Arena, MeshDae);
 
-				Mesh.Basis.O = V3(0.0f, -3.0f, -10.0f);
-				Mesh.Basis.X = XAxis();
-				Mesh.Basis.Y = YAxis();
-				Mesh.Basis.Z = ZAxis();
+				model Model = {};
+				Model.Meshes = PushStruct(Arena, mesh);
+				Model.Meshes[0] = Mesh;
+
+				Model.Basis.O = V3(0.0f, 0.0f, -5.0f);
+				Model.Basis.X = XAxis();
+				Model.Basis.Y = YAxis();
+				Model.Basis.Z = ZAxis();
 
 				v3 Color = V3(1.0f, 0.5f, 0.31f);
 
@@ -404,7 +443,7 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Transformations
 				//
 
-				mat4 ModelTransform = Mat4Translate(Mesh.Basis.O);
+				mat4 ModelTransform = Mat4Translate(Model.Basis.O) * Mat4YRotation(-30.0f);
 
 				v3 CameraP = V3(0.0f, 5.0f, 3.0f);
 				v3 Direction = V3(0.0f, -0.5f, -1.0f);
@@ -492,7 +531,7 @@ int main(int Argc, char **Argv)
 
 				// NOTE(Justin): Test ONE animation first
 
-				animation_info *AnimInfo = Mesh.AnimationsInfo;
+				animation_info *AnimInfo = Mesh.AnimationsInfo + 4;
 
 				u32 KeyFrameIndex = 0;
 				f32 AnimationCurrentTime = 0.0f;
@@ -507,7 +546,7 @@ int main(int Argc, char **Argv)
 				{
 					// NOTE(Justin): Update Animation time
 
-					AnimationCurrentTime += 0.01f;
+					AnimationCurrentTime += DtForFrame;
 					if(AnimationCurrentTime > AnimInfo->Times[KeyFrameIndex + 1])
 					{
 						KeyFrameIndex++;
@@ -527,12 +566,21 @@ int main(int Argc, char **Argv)
 
 						Mesh.JointTransforms[0] = RootJointT;
 						Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
+						mat4 JointTransform = Mat4Identity();
 						for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
 						{
 							joint *Joint = Mesh.Joints + Index;
 
 							mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
-							mat4 JointTransform = *Joint->Transform;
+
+							if((s32)Index == AnimInfo->JointIndex)
+							{
+								JointTransform = AnimInfo->AnimationTransforms[KeyFrameIndex];
+							}
+							else
+							{
+								JointTransform = *Joint->Transform;
+							}
 
 							JointTransform = ParentTransform * JointTransform;
 							mat4 InvBind = Mesh.InvBindTransforms[Index];
@@ -542,7 +590,7 @@ int main(int Argc, char **Argv)
 						}
 					}
 
-					glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 					glUseProgram(ShaderProgram);
