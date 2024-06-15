@@ -385,6 +385,10 @@ int main(int Argc, char **Argv)
 			glewExperimental = GL_TRUE;
 			if(glewInit() == GLEW_OK)
 			{
+				//
+				// NOTE(Justin): Model info
+				//
+
 				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\thingamajig.dae");
 
 				mesh Mesh = MeshInitFromCollada(Arena, MeshDae);
@@ -395,6 +399,10 @@ int main(int Argc, char **Argv)
 				Mesh.Basis.Z = ZAxis();
 
 				v3 Color = V3(1.0f, 0.5f, 0.31f);
+
+				//
+				// NOTE(Justin): Transformations
+				//
 
 				mat4 ModelTransform = Mat4Translate(Mesh.Basis.O);
 
@@ -408,10 +416,6 @@ int main(int Argc, char **Argv)
 				f32 ZFar = 100.0f;
 				mat4 PerspectiveTransform = Mat4Perspective(FOV, Aspect, ZNear, ZFar);
 
-				mat4 MVP = PerspectiveTransform *
-						   CameraTransform *
-						   ModelTransform;
-
 				glEnable(GL_DEBUG_OUTPUT);
 				glDebugMessageCallback(GLDebugCallback, 0);
 
@@ -421,6 +425,10 @@ int main(int Argc, char **Argv)
 
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+				//
+				// NOTE(Justin): Opengl shader initialization
+				//
 
 				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
 
@@ -459,6 +467,8 @@ int main(int Argc, char **Argv)
 				glEnableVertexAttribArray(4);
 				ExpectedAttributeCount += 3;
 
+				GLIBOInit(&IBO, Mesh.Indices, Mesh.IndicesCount);
+
 				s32 AttrCount;
 				glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
 				Assert(ExpectedAttributeCount == AttrCount);
@@ -472,8 +482,6 @@ int main(int Argc, char **Argv)
 					glGetActiveAttrib(ShaderProgram, i, sizeof(Name), &Length, &Size, &Type, Name);
 					printf("Attribute:%d\nName:%s\nSize:%d\n\n", i, Name, Size);
 				}
-
-				GLIBOInit(&IBO, Mesh.Indices, Mesh.IndicesCount);
 
 				glUseProgram(ShaderProgram);
 				UniformMatrixSet(ShaderProgram, "Model", ModelTransform);
@@ -524,11 +532,9 @@ int main(int Argc, char **Argv)
 							joint *Joint = Mesh.Joints + Index;
 
 							mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
-							//mat4 ParentTransform = *Mesh.Joints[Joint->ParentIndex].Transform;
 							mat4 JointTransform = *Joint->Transform;
 
 							JointTransform = ParentTransform * JointTransform;
-
 							mat4 InvBind = Mesh.InvBindTransforms[Index];
 
 							Mesh.JointTransforms[Index] = JointTransform;
@@ -540,9 +546,7 @@ int main(int Argc, char **Argv)
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 					glUseProgram(ShaderProgram);
-
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh.ModelSpaceTransforms, Mesh.JointCount);
-
 					glDrawElements(GL_TRIANGLES, Mesh.IndicesCount, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
