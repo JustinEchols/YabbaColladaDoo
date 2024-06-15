@@ -162,49 +162,63 @@ ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
 internal b32
 NodeHasKeysValues(string Str)
 {
-	b32 Result = SubStringExists(Str, " ");
+	b32 Result = false;
+	u8 *C = Str.Data;
+	for(u32 Index = 0; Index < Str.Size; ++Index)
+	{
+		if(*C++ == ' ')
+		{
+			Result = true;
+			break;
+		}
+	}
+
 	return(Result);
 }
 
 internal void
-NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char *TokenContext, char Delimeters[])
+NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char Delimeters[], u32 DelimCount)
 {
-	char *TagToken = strtok_s((char *)Token.Data, Delimeters, &TokenContext);
+	string_list List = StringSplit(Arena, Token, (u8 *)Delimeters, DelimCount);
+
+	string_node *T = List.First;
 
 	xml_attribute *Attr = Node->Attributes + Node->AttributeCount;
-	Attr->Key = StringAllocAndCopy(Arena, TagToken);
 
-	TagToken = strtok_s(0, Delimeters, &TokenContext);
-	Attr->Value = StringAllocAndCopy(Arena, TagToken);
-
+	Attr->Key = StringAllocAndCopy(Arena, T->String);
+	T = T->Next;
+	Attr->Value = StringAllocAndCopy(Arena, T->String);
 	Node->AttributeCount++;
 
-	TagToken = strtok_s(0, Delimeters, &TokenContext);
+	T = T->Next;
 
-	// WARNING(Justin): One must be very cautious when using strtok. If the node
-	// only has one key/value pair then TagToken will be null after the above
+	// WARNING(Justin): One must be cautious when using string nodes. If the
+	// attribute has one key/value pair then TagToken will be null after the above
 	// statement. Therefore trying to read it results in an access violation.
 	// The condition in the while works because the evaluation of TagToken is
 	// done first before strchr executes. This is not great and is in my opinion
 	// not very stable.
-	while(TagToken && !strchr(TagToken, '/'))
+
+	while(T && !StringEndsWith(T->String, '/'))
 	{
 		Attr = Node->Attributes + Node->AttributeCount;
 
-		// NOTE(Justin): Every key after the first one has a space at the start. Ignore it.
-		Attr->Key = StringAllocAndCopy(Arena, (TagToken + 1));
+		// NOTE(Justin): The split is done such that every key after the first
+		// one has a space at the very begining. Ignore it.
 
-		TagToken = strtok_s(0, Delimeters, &TokenContext);
+		T->String.Data++;
+		T->String.Size--;
 
-		Attr->Value = StringAllocAndCopy(Arena, TagToken);
-
+		Attr->Key = StringAllocAndCopy(Arena, T->String);
+		T = T->Next;
+		Attr->Value = StringAllocAndCopy(Arena, T->String);
 		Node->AttributeCount++;
 		Assert(Node->AttributeCount < COLLADA_ATTRIBUTE_MAX_COUNT);
 
-		TagToken = strtok_s(0, Delimeters, &TokenContext);
-		if(TagToken)
+		T = T->Next;
+		if(T)
 		{
-			if(SubStringExists(TagToken, "/"))
+			if(StringEndsWith(T->String, '/'))
 			{
 				break;
 			}
