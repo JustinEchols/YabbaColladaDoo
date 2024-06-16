@@ -1,14 +1,15 @@
-internal xml_node * PushXMLNode(memory_arena *Arena, xml_node *Parent)
+internal xml_node * 
+PushXMLNode(memory_arena *Arena, xml_node *Parent)
 {
 	xml_node *Node = PushStruct(Arena, xml_node);
 
 	Node->AttributeCountMax = COLLADA_ATTRIBUTE_MAX_COUNT;
-
 	Node->Attributes = PushArray(Arena, Node->AttributeCountMax, xml_attribute);
-	Node->ChildrenMaxCount = COLLADA_NODE_CHILDREN_MAX_COUNT;
 
-	Node->Children = PushArray(Arena, Node->ChildrenMaxCount, xml_node *);
 	Node->Parent = Parent;
+
+	Node->ChildrenMaxCount = COLLADA_NODE_CHILDREN_MAX_COUNT;
+	Node->Children = PushArray(Arena, Node->ChildrenMaxCount, xml_node *);
 
 	return(Node);
 }
@@ -55,15 +56,6 @@ NodeAttributeValueExists(xml_node *Node, char *AttrValue)
 		}
 	}
 
-	return(Result);
-}
-
-// TODO(Justin): Check for correctness
-
-inline b32
-NodeIsValid(xml_node N)
-{
-	b32 Result = (N.Tag.Size != 0);
 	return(Result);
 }
 
@@ -191,14 +183,6 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char De
 	Node->AttributeCount++;
 
 	T = T->Next;
-
-	// WARNING(Justin): One must be cautious when using string nodes. If the
-	// attribute has one key/value pair then TagToken will be null after the above
-	// statement. Therefore trying to read it results in an access violation.
-	// The condition in the while works because the evaluation of TagToken is
-	// done first before strchr executes. This is not great and is in my opinion
-	// not very stable.
-
 	while(T && !StringEndsWith(T->String, '/'))
 	{
 		Attr = Node->Attributes + Node->AttributeCount;
@@ -226,8 +210,6 @@ NodeProcessKeysValues(memory_arena *Arena, xml_node *Node, string Token, char De
 	}
 }
 
-
-
 internal void
 ParseColladaFloatArray(memory_arena *Arena, xml_node *Root, f32 **Dest, u32 *DestCount, char *TagName, char *ID)
 {
@@ -241,7 +223,15 @@ ParseColladaFloatArray(memory_arena *Arena, xml_node *Root, f32 **Dest, u32 *Des
 	NodeGet(SourceNode.Parent, &AccessorNode, "accessor");
 
 	string StrStride = NodeAttributeValueGet(&AccessorNode, "stride");
-	u32 Stride = U32FromASCII(StrStride.Data);
+	u32 Stride = 0;
+	if(StrStride.Size == 0)
+	{
+		Stride = 1;
+	}
+	else
+	{
+		Stride = U32FromASCII(StrStride.Data);
+	}
 
 	*DestCount = Count / Stride;
 	*Dest = PushArray(Arena, Count, f32);

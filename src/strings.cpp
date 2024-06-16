@@ -1,4 +1,10 @@
 
+b32 IsNewLine(char *S)
+{
+	b32 Result = ((*S == '\n') || (*S == '\r'));
+	return(Result);
+}
+
 internal string
 StringFromRange(u8 *First, u8 *Last)
 {
@@ -209,6 +215,32 @@ ParseU32Array(u32 *Dest, u32 DestCount, string Str)
 }
 
 internal void
+ParseF32Array(memory_arena *Arena, f32 *Dest, u32 DestCount, string Str)
+{
+	if(DestCount != 0)
+	{
+		Assert(Dest);
+
+		char Delim = ' ';
+		string_list List = StringSplit(Arena, Str, (u8 *)Delim, 1);
+		string_node *T = List.First;
+		//char *Context;
+		//char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+		//Dest[0] = F32FromASCII((u8 *)Tok);
+		Dest[0] = F32FromASCII(T->String.Data);
+		for(u32 Index = 1; Index < DestCount; ++Index)
+		{
+			T = T->Next;
+			//Tok = strtok_s(0, " ", &Context);
+			if(T)
+			{
+				Dest[Index] = F32FromASCII((u8 *)T->String.Data);
+			}
+		}
+	}
+}
+
+internal void
 ParseF32Array(f32 *Dest, u32 DestCount, string Str)
 {
 	if(DestCount != 0)
@@ -216,11 +248,11 @@ ParseF32Array(f32 *Dest, u32 DestCount, string Str)
 		Assert(Dest);
 
 		char *Context;
-		char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+		char *Tok = strtok_s((char *)Str.Data, " \n\r", &Context);
 		Dest[0] = F32FromASCII((u8 *)Tok);
 		for(u32 Index = 1; Index < DestCount; ++Index)
 		{
-			Tok = strtok_s(0, " ", &Context);
+			Tok = strtok_s(0, " \n\r", &Context);
 			if(Tok)
 			{
 				Dest[Index] = F32FromASCII((u8 *)Tok);
@@ -253,23 +285,27 @@ StringAllocAndCopy(memory_arena *Arena, char *Cstr)
 	return(Result);
 }
 
-// NOTE(Justin): This relies on the fact that the strings are separated by spaces ' '
-// Is this parse sentence?
 internal void
 ParseStringArray(memory_arena *Arena, string *Dest, u32 DestCount, string Str)
 {
 	char *Context;
-	char *Tok = strtok_s((char *)Str.Data, " ", &Context);
+	char *Tok = strtok_s((char *)Str.Data, " \n\r", &Context);
 
 	u32 Index = 0;
-	Dest[Index++] = StringAllocAndCopy(Arena, Tok);
+	if(!IsNewLine(Tok))
+	{
+		Dest[Index++] = StringAllocAndCopy(Arena, Tok);
+	}
 
 	while(Tok)
 	{
-		Tok = strtok_s(0, " ", &Context);
+		Tok = strtok_s(0, " \n\r", &Context);
 		if(Tok)
 		{
-			Dest[Index++] = StringAllocAndCopy(Arena, Tok);
+			if(!IsNewLine(Tok))
+			{
+				Dest[Index++] = StringAllocAndCopy(Arena, Tok);
+			}
 		}
 
 	}

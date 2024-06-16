@@ -11,14 +11,14 @@ struct xml_node
 	string Tag;
 	string InnerText;
 
-	s32 AttributeCountMax;
 	s32 AttributeCount;
+	s32 AttributeCountMax;
 	xml_attribute *Attributes;
 
 	xml_node *Parent;
 
-	s32 ChildrenMaxCount;
 	s32 ChildrenCount;
+	s32 ChildrenMaxCount;
 	xml_node **Children;
 };
 

@@ -1,11 +1,10 @@
 
 /*
-
  TODO(Justin):
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [] Better buffering of text using memory arenas
  [] Remove crt functions
- [] Change children array from fixed size to allocate on demand
+ [] Change children array from fixed size to allocate on demand?
 	[] Is there a way to a priori determine the size (then can allocate)?
 	[] Sparse hash table?
 	[] Dynamic list/array
@@ -19,13 +18,16 @@
 	[] Temporary memory? Or just parse the data directly from the inner text?
 	[] Handle more complicated meshes
 	[] Handle meshes with materials
+	[] Move animation data outside mesh struct
  [] Skeleton initialization
 	[] Library Controllers done in one tree traversal
 	[X] Skeletal animation transforms
 	[X] Library Animations done in one tree traversal
-	[] Normalize weights so that they are a convex combination
+	[X] Normalize weights so that they are a convex combination
 	[] Instead of storing mat4's for animation, store pos, quat, scale and construct mat4's
 	[] Lerp between key frames using pos, quat, and scale.
+	[] Some meshes may use the same rig some may not need to handle this
+	[] Need a way to organize multiple meshes, controllers, and joint hierarchies.
  [] Write model data to simple file format (mesh/animation/material)
  [] How to determine the skeleton? Instance controller and skeleton node however there can exist more than one
 	skeleton in a collada file.
@@ -66,7 +68,6 @@
 (Node)->Next=0)
 #define SLLQueuePush(First,Last,Node) SLLQueuePush_N(First,Last,Node,Next)
 
-
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
@@ -99,7 +100,6 @@ ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
 	Arena->Size = Size;
 	Arena->Used = 0;
 }
-
 
 internal void *
 PushSize_(memory_arena *Arena, memory_index Size)
@@ -175,7 +175,7 @@ uniform mat4 Model;
 uniform mat4 View;
 uniform mat4 Projection;
 
-#define MAX_JOINT_COUNT 20
+#define MAX_JOINT_COUNT 70
 uniform mat4 Transforms[MAX_JOINT_COUNT];
 
 out vec4 WeightPaint;
@@ -183,7 +183,6 @@ out vec3 N;
 
 void main()
 {
-
 	WeightPaint = vec4(1 - Weights[0], 1 - Weights[1], 1 - Weights[2], 1.0);
 	
 	vec4 Pos = vec4(0.0);
@@ -199,7 +198,7 @@ void main()
 	}
 
 	gl_Position = Projection * View * Model * Pos;
-	N = Normal;
+	N = vec3(transpose(inverse(Model)) * vec4(Normal, 1.0));
 })";
 
 char *BasicFsSrc = R"(
@@ -242,7 +241,6 @@ FileClose(FILE *OpenFile)
 	return(Result);
 }
 
-// TODO(Justin): The collada data can be temporary memory?
 internal loaded_dae
 ColladaFileLoad(memory_arena *Arena, char *FileName)
 {
@@ -259,6 +257,10 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 			if(FileClose(FileHandle))
 			{
 				Result.FullPath = StringAllocAndCopy(Arena, FileName);
+
+				//
+				// NOTE(Justin): Skip to the <COLLADA> node.
+				//
 
 				char Buffer[512];
 				s32 InnerTextIndex = 0;
@@ -398,15 +400,11 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Model info
 				//
 
-				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\thingamajig.dae");
+				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\XBot.dae");
 
-				mesh Mesh = MeshInitFromCollada(Arena, MeshDae);
+				model Model = ModelInitFromCollada(Arena, MeshDae);
 
-				model Model = {};
-				Model.Meshes = PushStruct(Arena, mesh);
-				Model.Meshes[0] = Mesh;
-
-				Model.Basis.O = V3(0.0f, 0.0f, -5.0f);
+				Model.Basis.O = V3(0.0f, -80.0f, -250.0f);
 				Model.Basis.X = XAxis();
 				Model.Basis.Y = YAxis();
 				Model.Basis.Z = ZAxis();
@@ -417,10 +415,10 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Transformations
 				//
 
-				mat4 ModelTransform = Mat4Translate(Model.Basis.O) * Mat4YRotation(-30.0f);
+				mat4 ModelTransform = Mat4Translate(Model.Basis.O);
 
 				v3 CameraP = V3(0.0f, 5.0f, 3.0f);
-				v3 Direction = V3(0.0f, -0.5f, -1.0f);
+				v3 Direction = V3(0.0f, 0.0f, -1.0f);
 				mat4 CameraTransform = Mat4Camera(CameraP, CameraP + Direction);
 
 				f32 FOV = DegreeToRad(45.0f);
@@ -443,35 +441,41 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Opengl shader initialization
 				//
 
+				mesh Mesh0 = Model.Meshes[0];
+				mesh Mesh1 = Model.Meshes[1];
+
 				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
 
-				u32 VA;
-				u32 PosVB, NormVB, TexVB, JointInfoVB;
-				u32 IBO;
+				u32 VA[2];
+				u32 PosVB[2], NormVB[2], TexVB[2], JointInfoVB;
+				u32 IBO[2];
+				//u32 PosVB, NormVB, TexVB, JointInfoVB;
+				//u32 IBO;
+
 				s32 ExpectedAttributeCount = 0;
 
-				glGenVertexArrays(1, &VA);
-				glBindVertexArray(VA);
+				glGenVertexArrays(1, &VA[0]);
+				glBindVertexArray(VA[0]);
 
-				glGenBuffers(1, &PosVB);
-				glBindBuffer(GL_ARRAY_BUFFER, PosVB);
-				glBufferData(GL_ARRAY_BUFFER, Mesh.PositionsCount * sizeof(f32), Mesh.Positions, GL_STATIC_DRAW);
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+				glGenBuffers(1, &PosVB[0]);
+				glBindBuffer(GL_ARRAY_BUFFER, PosVB[0]);
+				glBufferData(GL_ARRAY_BUFFER, Mesh0.PositionsCount * sizeof(f32), Mesh0.Positions, GL_STATIC_DRAW);
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 				glEnableVertexAttribArray(0);
 				ExpectedAttributeCount++;
 
-				glGenBuffers(1, &NormVB);
-				glBindBuffer(GL_ARRAY_BUFFER, NormVB);
-				glBufferData(GL_ARRAY_BUFFER, Mesh.NormalsCount * sizeof(f32), Mesh.Normals, GL_STATIC_DRAW);
-				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+				glGenBuffers(1, &NormVB[0]);
+				glBindBuffer(GL_ARRAY_BUFFER, NormVB[0]);
+				glBufferData(GL_ARRAY_BUFFER, Mesh0.NormalsCount * sizeof(f32), Mesh0.Normals, GL_STATIC_DRAW);
+				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 				glEnableVertexAttribArray(1);
 				ExpectedAttributeCount++;
 
 				glGenBuffers(1, &JointInfoVB);
 				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB);
-				glBufferData(GL_ARRAY_BUFFER, Mesh.JointInfoCount * sizeof(joint_info), Mesh.JointsInfo, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, Mesh0.JointInfoCount * sizeof(joint_info), Mesh0.JointsInfo, GL_STATIC_DRAW);
 
-				glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(joint_info), (void *)0);
+				glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(joint_info), 0);
 				glVertexAttribIPointer(3, 3, GL_UNSIGNED_INT, sizeof(joint_info), (void *)(1 * sizeof(u32)));
 				glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(joint_info), (void *)(4 * sizeof(u32)));
 
@@ -480,7 +484,7 @@ int main(int Argc, char **Argv)
 				glEnableVertexAttribArray(4);
 				ExpectedAttributeCount += 3;
 
-				GLIBOInit(&IBO, Mesh.Indices, Mesh.IndicesCount);
+				GLIBOInit(&IBO[0], Mesh0.Indices, Mesh0.IndicesCount);
 
 				s32 AttrCount;
 				glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
@@ -496,16 +500,63 @@ int main(int Argc, char **Argv)
 					printf("Attribute:%d\nName:%s\nSize:%d\n\n", i, Name, Size);
 				}
 
+
+				//
+				// NOTE(Justin): Second Mesh
+				//
+
+				ExpectedAttributeCount = 0;
+
+				glGenVertexArrays(1, &VA[1]);
+				glBindVertexArray(VA[1]);
+
+				glGenBuffers(1, &PosVB[1]);
+				glBindBuffer(GL_ARRAY_BUFFER, PosVB[1]);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1.PositionsCount * sizeof(f32), Mesh1.Positions, GL_STATIC_DRAW);
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+				glEnableVertexAttribArray(0);
+				ExpectedAttributeCount++;
+
+				glGenBuffers(1, &NormVB[1]);
+				glBindBuffer(GL_ARRAY_BUFFER, NormVB[1]);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1.NormalsCount * sizeof(f32), Mesh1.Normals, GL_STATIC_DRAW);
+				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+				glEnableVertexAttribArray(1);
+				ExpectedAttributeCount++;
+
+				glGenBuffers(1, &JointInfoVB);
+				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB);
+				glBufferData(GL_ARRAY_BUFFER, Mesh0.JointInfoCount * sizeof(joint_info), Mesh0.JointsInfo, GL_STATIC_DRAW);
+
+				glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(joint_info), 0);
+				glVertexAttribIPointer(3, 3, GL_UNSIGNED_INT, sizeof(joint_info), (void *)(1 * sizeof(u32)));
+				glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(joint_info), (void *)(4 * sizeof(u32)));
+
+				glEnableVertexAttribArray(2);
+				glEnableVertexAttribArray(3);
+				glEnableVertexAttribArray(4);
+				ExpectedAttributeCount += 3;
+
+				glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
+				Assert(ExpectedAttributeCount == AttrCount);
+
+				Size = 0;
+				Length = 0;
+				for(s32 i = 0; i < AttrCount; ++i)
+				{
+					glGetActiveAttrib(ShaderProgram, i, sizeof(Name), &Length, &Size, &Type, Name);
+					printf("Attribute:%d\nName:%s\nSize:%d\n\n", i, Name, Size);
+				}
+
 				glUseProgram(ShaderProgram);
 				UniformMatrixSet(ShaderProgram, "Model", ModelTransform);
 				UniformMatrixSet(ShaderProgram, "View", CameraTransform);
 				UniformMatrixSet(ShaderProgram, "Projection", PerspectiveTransform);
 				UniformV3Set(ShaderProgram, "Color", Color);
 
-
 				// NOTE(Justin): Test ONE animation first
 
-				animation_info *AnimInfo = Mesh.AnimationsInfo + 4;
+				animation_info *AnimInfo = Mesh0.AnimationsInfo + 4;
 
 				u32 KeyFrameIndex = 0;
 				f32 AnimationCurrentTime = 0.0f;
@@ -531,36 +582,46 @@ int main(int Argc, char **Argv)
 						}
 					}
 
-					if(Mesh.JointInfoCount != 0)
+					for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 					{
-						mat4 Bind = *Mesh.BindTransform;
-
-						mat4 RootJointT = *Mesh.Joints[0].Transform;
-						mat4 RootInvBind = Mesh.InvBindTransforms[0];
-
-						Mesh.JointTransforms[0] = RootJointT;
-						Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
-						mat4 JointTransform = Mat4Identity();
-						for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
+						mesh Mesh = Model.Meshes[MeshIndex];
+						if(Mesh.JointInfoCount != 0)
 						{
-							joint *Joint = Mesh.Joints + Index;
+							mat4 Bind = *Mesh.BindTransform;
+							mat4 RootJointT = *Model.Meshes[0].Joints[0].Transform;
+							mat4 RootInvBind = Mesh.InvBindTransforms[0];
 
-							mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
+							Mesh.JointTransforms[0] = RootJointT;
+							Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
+							mat4 JointTransform = Mat4Identity();
 
-							if((s32)Index == AnimInfo->JointIndex)
+							//
+							// NOTE(Justin): The XBot has two meshes that use
+							// the same joint hierarch. For testing purposes we
+							// use the first meshes joint hierarchy for BOTH.
+							//
+
+							for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
 							{
-								JointTransform = AnimInfo->AnimationTransforms[KeyFrameIndex];
-							}
-							else
-							{
+								joint *Joint = Model.Meshes[0].Joints + Index;
+								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
+#if 0
+								if((s32)Index == AnimInfo->JointIndex)
+								{
+									JointTransform = AnimInfo->Transforms[KeyFrameIndex];
+								}
+								else
+								{
+									JointTransform = *Joint->Transform;
+								}
+#endif
 								JointTransform = *Joint->Transform;
+								JointTransform = ParentTransform * JointTransform;
+								mat4 InvBind = Mesh.InvBindTransforms[Index];
+
+								Mesh.JointTransforms[Index] = JointTransform;
+								Mesh.ModelSpaceTransforms[Index] = JointTransform * InvBind * Bind;
 							}
-
-							JointTransform = ParentTransform * JointTransform;
-							mat4 InvBind = Mesh.InvBindTransforms[Index];
-
-							Mesh.JointTransforms[Index] = JointTransform;
-							Mesh.ModelSpaceTransforms[Index] = JointTransform * InvBind * Bind;
 						}
 					}
 
@@ -568,8 +629,14 @@ int main(int Argc, char **Argv)
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 					glUseProgram(ShaderProgram);
-					UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh.ModelSpaceTransforms, Mesh.JointCount);
-					glDrawElements(GL_TRIANGLES, Mesh.IndicesCount, GL_UNSIGNED_INT, 0);
+
+					glBindVertexArray(VA[0]);
+					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[0].ModelSpaceTransforms, Model.Meshes[0].JointCount);
+					glDrawElements(GL_TRIANGLES, Model.Meshes[0].IndicesCount, GL_UNSIGNED_INT, 0);
+
+					glBindVertexArray(VA[1]);
+					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[1].ModelSpaceTransforms, Model.Meshes[1].JointCount);
+					glDrawElements(GL_TRIANGLES, Model.Meshes[1].IndicesCount, GL_UNSIGNED_INT, 0);
 
 					glfwSwapBuffers(Window.Handle);
 

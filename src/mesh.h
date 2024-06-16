@@ -15,7 +15,6 @@ struct joint
 	mat4 *Transform;
 };
 
-// TODO(Justin): Do i care about the joint name? Can just store and index
 struct animation_info
 {
 	string JointName;
@@ -25,7 +24,7 @@ struct animation_info
 	f32 *Times;
 
 	u32 TransformCount;
-	mat4 *AnimationTransforms;
+	mat4 *Transforms;
 };
 
 struct animation
@@ -52,6 +51,8 @@ struct animation
 
 struct mesh
 {
+	string Name;
+
 	u32 PositionsCount;
 	u32 NormalsCount;
 	u32 UVCount;
@@ -78,6 +79,7 @@ struct mesh
 	mat4 *ModelSpaceTransforms;
 
 	animation_info *AnimationsInfo;
+#endif
 };
 
 struct model
