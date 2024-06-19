@@ -79,7 +79,6 @@ struct mesh
 	mat4 *ModelSpaceTransforms;
 
 	animation_info *AnimationsInfo;
-#endif
 };
 
 struct model
@@ -88,6 +87,8 @@ struct model
 
 	u32 MeshCount;
 	mesh *Meshes;
+
+	// TODO(Justin): OpenGL info here.
 };
 
 #define MESH_H

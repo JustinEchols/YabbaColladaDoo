@@ -212,7 +212,7 @@ uniform vec3 Color;
 out vec4 Result;
 void main()
 {
-	Result = WeightPaint + 0.1f * vec4(N, 1.0);
+	Result = WeightPaint + 0.5f * vec4(N, 1.0);
 })";
 
 internal s32
@@ -287,7 +287,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				xml_node *CurrentNode = Result.Root;
 
 				CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
-
 				Token = Token->Next;
 				CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 
@@ -430,6 +429,9 @@ int main(int Argc, char **Argv)
 				glEnable(GL_DEBUG_OUTPUT);
 				glDebugMessageCallback(GLDebugCallback, 0);
 
+				glEnable(GL_DEPTH_TEST);
+				glDepthFunc(GL_LESS);
+
 				glFrontFace(GL_CCW);
 				glEnable(GL_CULL_FACE);
 				glCullFace(GL_BACK);
@@ -442,15 +444,37 @@ int main(int Argc, char **Argv)
 				//
 
 				mesh Mesh0 = Model.Meshes[0];
-				mesh Mesh1 = Model.Meshes[1];
+				mesh *Mesh1 = &Model.Meshes[1];
+
+				//
+				// NOTE(Justin): HACK. The Xbot has two meshes. The second mesh
+				// uses almost the same joint hierarchy as the first mesh minus
+				// one joint. The joints for the second mesh are initialized
+				// here. This needs to be done during the loading of the mesh!
+				//
+
+				Mesh1->Joints = PushArray(Arena, Mesh1->JointCount, joint);
+				for(u32 Index = 0; Index < Mesh1->JointCount; ++Index)
+				{
+					string JointName = Mesh1->JointNames[Index];
+					s32 JIndex = JointIndexGet(Mesh0.JointNames, Mesh0.JointCount, JointName);
+					Mesh1->Joints[Index] = Mesh0.Joints[JIndex];
+				}
+
+				for(u32 Index = 6; Index < Mesh1->JointCount; ++Index)
+				{
+					joint *Joint = Mesh1->Joints + Index;
+					if(Joint->ParentIndex > 3)
+					{
+						Joint->ParentIndex--;
+					}
+				}
 
 				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
 
 				u32 VA[2];
-				u32 PosVB[2], NormVB[2], TexVB[2], JointInfoVB;
+				u32 PosVB[2], NormVB[2], TexVB[2], JointInfoVB[2];
 				u32 IBO[2];
-				//u32 PosVB, NormVB, TexVB, JointInfoVB;
-				//u32 IBO;
 
 				s32 ExpectedAttributeCount = 0;
 
@@ -471,8 +495,8 @@ int main(int Argc, char **Argv)
 				glEnableVertexAttribArray(1);
 				ExpectedAttributeCount++;
 
-				glGenBuffers(1, &JointInfoVB);
-				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB);
+				glGenBuffers(1, &JointInfoVB[0]);
+				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB[0]);
 				glBufferData(GL_ARRAY_BUFFER, Mesh0.JointInfoCount * sizeof(joint_info), Mesh0.JointsInfo, GL_STATIC_DRAW);
 
 				glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(joint_info), 0);
@@ -485,6 +509,7 @@ int main(int Argc, char **Argv)
 				ExpectedAttributeCount += 3;
 
 				GLIBOInit(&IBO[0], Mesh0.Indices, Mesh0.IndicesCount);
+				glBindVertexArray(0);
 
 				s32 AttrCount;
 				glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
@@ -500,7 +525,6 @@ int main(int Argc, char **Argv)
 					printf("Attribute:%d\nName:%s\nSize:%d\n\n", i, Name, Size);
 				}
 
-
 				//
 				// NOTE(Justin): Second Mesh
 				//
@@ -512,21 +536,21 @@ int main(int Argc, char **Argv)
 
 				glGenBuffers(1, &PosVB[1]);
 				glBindBuffer(GL_ARRAY_BUFFER, PosVB[1]);
-				glBufferData(GL_ARRAY_BUFFER, Mesh1.PositionsCount * sizeof(f32), Mesh1.Positions, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1->PositionsCount * sizeof(f32), Mesh1->Positions, GL_STATIC_DRAW);
 				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 				glEnableVertexAttribArray(0);
 				ExpectedAttributeCount++;
 
 				glGenBuffers(1, &NormVB[1]);
 				glBindBuffer(GL_ARRAY_BUFFER, NormVB[1]);
-				glBufferData(GL_ARRAY_BUFFER, Mesh1.NormalsCount * sizeof(f32), Mesh1.Normals, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1->NormalsCount * sizeof(f32), Mesh1->Normals, GL_STATIC_DRAW);
 				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 				glEnableVertexAttribArray(1);
 				ExpectedAttributeCount++;
 
-				glGenBuffers(1, &JointInfoVB);
-				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB);
-				glBufferData(GL_ARRAY_BUFFER, Mesh0.JointInfoCount * sizeof(joint_info), Mesh0.JointsInfo, GL_STATIC_DRAW);
+				glGenBuffers(1, &JointInfoVB[1]);
+				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB[1]);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1->JointInfoCount * sizeof(joint_info), Mesh1->JointsInfo, GL_STATIC_DRAW);
 
 				glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(joint_info), 0);
 				glVertexAttribIPointer(3, 3, GL_UNSIGNED_INT, sizeof(joint_info), (void *)(1 * sizeof(u32)));
@@ -536,6 +560,9 @@ int main(int Argc, char **Argv)
 				glEnableVertexAttribArray(3);
 				glEnableVertexAttribArray(4);
 				ExpectedAttributeCount += 3;
+
+				GLIBOInit(&IBO[1], Mesh1->Indices, Mesh1->IndicesCount);
+				glBindVertexArray(0);
 
 				glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
 				Assert(ExpectedAttributeCount == AttrCount);
@@ -588,22 +615,15 @@ int main(int Argc, char **Argv)
 						if(Mesh.JointInfoCount != 0)
 						{
 							mat4 Bind = *Mesh.BindTransform;
-							mat4 RootJointT = *Model.Meshes[0].Joints[0].Transform;
+							mat4 RootJointT = *Mesh.Joints[0].Transform;
 							mat4 RootInvBind = Mesh.InvBindTransforms[0];
 
 							Mesh.JointTransforms[0] = RootJointT;
 							Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
 							mat4 JointTransform = Mat4Identity();
-
-							//
-							// NOTE(Justin): The XBot has two meshes that use
-							// the same joint hierarch. For testing purposes we
-							// use the first meshes joint hierarchy for BOTH.
-							//
-
 							for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
 							{
-								joint *Joint = Model.Meshes[0].Joints + Index;
+								joint *Joint = Mesh.Joints + Index;
 								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
 #if 0
 								if((s32)Index == AnimInfo->JointIndex)
@@ -633,10 +653,12 @@ int main(int Argc, char **Argv)
 					glBindVertexArray(VA[0]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[0].ModelSpaceTransforms, Model.Meshes[0].JointCount);
 					glDrawElements(GL_TRIANGLES, Model.Meshes[0].IndicesCount, GL_UNSIGNED_INT, 0);
+					glBindVertexArray(0);
 
 					glBindVertexArray(VA[1]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[1].ModelSpaceTransforms, Model.Meshes[1].JointCount);
 					glDrawElements(GL_TRIANGLES, Model.Meshes[1].IndicesCount, GL_UNSIGNED_INT, 0);
+					glBindVertexArray(0);
 
 					glfwSwapBuffers(Window.Handle);
 

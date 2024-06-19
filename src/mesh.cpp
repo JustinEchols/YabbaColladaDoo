@@ -340,7 +340,7 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		//
 		// NOTE(Justin): The children of library controllers are controller nodes.
 		// IF WE ASSUME THAT EACH MESH HAS A CONTROLLER THEN THE CONTROLLERS ARE IN
-		// MESH ORDER. This is the approach that will be taken. If the does not work
+		// MESH ORDER. This is the approach that is taken. If this does not work
 		// in general (i.e. a mesh may not have a controller) then we will need to
 		// get the controller of the mesh by way of libaray_visual_scenes.
 		//
@@ -361,8 +361,8 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 			xml_node BindShape = {};
 			NodeGet(&Controller, &BindShape, "bind_shape_matrix");
-			ParseF32Array((f32 *)Mesh.BindTransform, 16, BindShape.InnerText);
 
+			ParseF32Array((f32 *)Mesh.BindTransform, 16, BindShape.InnerText);
 			ParseColladaStringArray(Arena, &Controller, &Mesh.JointNames, &Mesh.JointCount);
 
 			Assert(Mesh.JointNames);
@@ -401,6 +401,13 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 			xml_node NodeJointsAndWeights = {};
 			NodeGet(&Controller, &NodeJointsAndWeights, "v");
+
+			//
+			// NOTE(Justin): The joint count array is a list of #'s for each
+			// vertex. The # is how many joints affect the vertex.
+			// In order to get the count of all the joint indices and weights add up all the #'s
+			// and multiply the sum by 2. 
+			//
 
 			u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointInfoCount);
 			u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
