@@ -389,7 +389,7 @@ int main(int Argc, char **Argv)
 		if(Window.Handle)
 		{
 			glfwMakeContextCurrent(Window.Handle);
-			glfwSetInputMode(Window.Handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			glfwSetInputMode(Window.Handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
 			glewExperimental = GL_TRUE;
 			if(glewInit() == GLEW_OK)
@@ -398,7 +398,15 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Model info
 				//
 
-				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
+				loaded_dae MeshDae = {};
+				if(Argc == 2)
+				{
+					MeshDae = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
+				}
+				else
+				{
+					MeshDae = ColladaFileLoad(Arena, "..\\data\\XBot.dae");
+				}
 
 				model Model = ModelInitFromCollada(Arena, MeshDae);
 
@@ -569,7 +577,7 @@ int main(int Argc, char **Argv)
 						if(Mesh.JointInfoCount != 0)
 						{
 							mat4 Bind = Mesh.BindTransform;
-							mat4 RootJointT = *Mesh.Joints[0].Transform;
+							mat4 RootJointT = Mesh.Joints[0].Transform;
 							mat4 RootInvBind = Mesh.InvBindTransforms[0];
 
 							Mesh.JointTransforms[0] = RootJointT;
@@ -580,7 +588,7 @@ int main(int Argc, char **Argv)
 								joint *Joint = Mesh.Joints + Index;
 								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
 
-								JointTransform = *Joint->Transform;
+								JointTransform = Joint->Transform;
 								JointTransform = ParentTransform * JointTransform;
 								mat4 InvBind = Mesh.InvBindTransforms[Index];
 

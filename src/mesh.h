@@ -12,7 +12,7 @@ struct joint
 	string Name;
 	s32 ParentIndex;
 	s32 Index;
-	mat4 *Transform;
+	mat4 Transform;
 };
 
 struct animation_info

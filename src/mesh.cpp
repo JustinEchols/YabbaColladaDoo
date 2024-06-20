@@ -110,9 +110,7 @@ JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCoun
 				xml_node *Child = Node->Children[0];
 				if(StringsAreSame(Child->Tag, "matrix"))
 				{
-					Joint->Transform = PushArray(Arena, 1, mat4);
-					ParseF32Array(Arena, (f32 *)Joint->Transform, 16, Child->InnerText);
-
+					ParseF32Array(Arena, &Joint->Transform.E[0][0], 16, Child->InnerText);
 					(*JointIndex)++;
 				}
 			}
@@ -461,8 +459,7 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 				joint *Joints = Mesh.Joints;
 				Joints->Name = Mesh.JointNames[0];
 				Joints->ParentIndex = -1;
-				Joints->Transform = PushArray(Arena, 1, mat4);
-				ParseF32Array(Arena, (f32 *)Joints->Transform, 16, JointRoot.Children[0]->InnerText);
+				ParseF32Array(Arena, &Joints->Transform.E[0][0], 16, JointRoot.Children[0]->InnerText);
 
 				u32 JointIndex = 1;
 				JointsGet(Arena, &JointRoot, Mesh.JointNames, Mesh.JointCount, Joints, &JointIndex);
