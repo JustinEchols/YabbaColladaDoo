@@ -240,7 +240,7 @@ ParseColladaFloatArray(memory_arena *Arena, xml_node *Root, f32 **Dest, u32 *Des
 }
 
 
-// TODO(Justin): Is Name_array the only xml string array in collada files?
+// TODO(Justin): Is Name_array the only string array in collada files?
 internal void
 ParseColladaStringArray(memory_arena *Arena, xml_node *Root, string **Dest, u32 *DestCount, char *StringArrayName = 0)
 {
@@ -268,8 +268,6 @@ ParseColladaU32Array(memory_arena *Arena, xml_node *Root, u32 **Dest, u32 DestCo
 	ParseU32Array(*Dest, DestCount, TargetNode.InnerText);
 }
 
-// TODO(Justin): Think about what is needed for this. (more/less ?)
-// Is passing a null value a bad idea?
 internal u32
 U32FromAttributeValue(xml_node *Node)
 {
