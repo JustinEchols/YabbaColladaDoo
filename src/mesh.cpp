@@ -73,10 +73,6 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 Jo
 	}
 }
 
-
-// TODO(Justin): How much guarding/checking should there be?
-// TODO(Justin): Only the matrix, joint name, and parent index are retrieved
-// now. What about angle, quaternion?
 internal void
 JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount, joint *Joints, u32 *JointIndex)
 {
@@ -93,22 +89,33 @@ JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCoun
 
 			Joint->Name = SID.Value;
 
+			// NOTE(Justin): The two meshes of XBot use slightly different joint
+			// hierarchies. The second mesh has one less node than the first. To
+			// initilize the second mesh we use the original joint hierarchy
+			// that contains all the joints. Since the second mesh does not have
+			// all the nodes when we look up the joint index a return value of
+			// -1 is possible. This happens when we are at a Node in the joint
+			// hierarchy that is NOT part of the second mesh.
+
 			s32 Index = JointIndexGet(JointNames, JointCount, SID.Value);
-			s32 ParentIndex = JointIndexGet(JointNames, JointCount, ParentSID.Value);
-			Assert(Index != - 1);
-			Assert(ParentIndex != - 1);
+			if(Index != -1)
+			{
+				s32 ParentIndex = JointIndexGet(JointNames, JointCount, ParentSID.Value);
+				Assert(Index != - 1);
+				Assert(ParentIndex != - 1);
 
-			Joint->Index = (u32)Index;
-			Joint->ParentIndex = (u32)ParentIndex;
+				Joint->Index = (u32)Index;
+				Joint->ParentIndex = (u32)ParentIndex;
 
-		}
-		else if(StringsAreSame(Node->Tag, "matrix"))
-		{
-			joint *Joint = Joints + *JointIndex;
-			Joint->Transform = PushArray(Arena, 1, mat4);
-			ParseF32Array((f32 *)Joint->Transform, 16, Node->InnerText);
+				xml_node *Child = Node->Children[0];
+				if(StringsAreSame(Child->Tag, "matrix"))
+				{
+					Joint->Transform = PushArray(Arena, 1, mat4);
+					ParseF32Array(Arena, (f32 *)Joint->Transform, 16, Child->InnerText);
 
-			(*JointIndex)++;
+					(*JointIndex)++;
+				}
+			}
 		}
 
 		if(*Node->Children)
@@ -441,6 +448,30 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			}
 		}
 
+		xml_node LibVisScenes = {};
+		NodeGet(Root, &LibVisScenes, "library_visual_scenes");
+		if(LibVisScenes.ChildrenCount != 0)
+		{
+			Mesh.Joints = PushArray(Arena, Mesh.JointCount, joint);
+
+			xml_node JointRoot = {};
+			// TODO(Justin): Better way to get the root joint node in tree.
+			FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
+			if(JointRoot.ChildrenCount != 0)
+			{
+
+				joint *Joints = Mesh.Joints;
+				Joints->Name = Mesh.JointNames[0];
+				Joints->ParentIndex = -1;
+				Joints->Transform = PushArray(Arena, 1, mat4);
+				ParseF32Array(Arena, (f32 *)Joints->Transform, 16, JointRoot.Children[0]->InnerText);
+
+				u32 JointIndex = 1;
+				JointsGet(Arena, &JointRoot, Mesh.JointNames, Mesh.JointCount, Joints, &JointIndex);
+			}
+		}
+
+
 		Model.Meshes[MeshIndex] = Mesh;
 	}
 
@@ -471,6 +502,7 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	// NOTE(Justin): Visual Scenes (only joint hierarchy)
 	//
 
+#if 0
 	xml_node LibVisScenes = {};
 	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
 	if(LibVisScenes.ChildrenCount != 0)
@@ -482,15 +514,18 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
 		if(JointRoot.ChildrenCount != 0)
 		{
-			u32 JointIndex = 0;
-			joint *Joints = Mesh->Joints;
 
+			joint *Joints = Mesh->Joints;
 			Joints->Name = Mesh->JointNames[0];
 			Joints->ParentIndex = -1;
+			Joints->Transform = PushArray(Arena, 1, mat4);
+			ParseF32Array((f32 *)Joints->Transform, 16, JointRoot.Children[0]->InnerText);
 
+			u32 JointIndex = 1;
 			JointsGet(Arena, &JointRoot, Mesh->JointNames, Mesh->JointCount, Joints, &JointIndex);
 		}
 	}
+#endif
 
 	return(Model);
 }

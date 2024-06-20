@@ -112,7 +112,6 @@ PushSize_(memory_arena *Arena, memory_index Size)
 	return(Result);
 }
 
-
 internal void *
 MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 {
@@ -446,30 +445,6 @@ int main(int Argc, char **Argv)
 				mesh Mesh0 = Model.Meshes[0];
 				mesh *Mesh1 = &Model.Meshes[1];
 
-				//
-				// NOTE(Justin): HACK. The Xbot has two meshes. The second mesh
-				// uses almost the same joint hierarchy as the first mesh minus
-				// one joint. The joints for the second mesh are initialized
-				// here. This needs to be done during the loading of the mesh!
-				//
-
-				Mesh1->Joints = PushArray(Arena, Mesh1->JointCount, joint);
-				for(u32 Index = 0; Index < Mesh1->JointCount; ++Index)
-				{
-					string JointName = Mesh1->JointNames[Index];
-					s32 JIndex = JointIndexGet(Mesh0.JointNames, Mesh0.JointCount, JointName);
-					Mesh1->Joints[Index] = Mesh0.Joints[JIndex];
-				}
-
-				for(u32 Index = 6; Index < Mesh1->JointCount; ++Index)
-				{
-					joint *Joint = Mesh1->Joints + Index;
-					if(Joint->ParentIndex > 3)
-					{
-						Joint->ParentIndex--;
-					}
-				}
-
 				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
 
 				u32 VA[2];
@@ -581,34 +556,13 @@ int main(int Argc, char **Argv)
 				UniformMatrixSet(ShaderProgram, "Projection", PerspectiveTransform);
 				UniformV3Set(ShaderProgram, "Color", Color);
 
-				// NOTE(Justin): Test ONE animation first
-
-				animation_info *AnimInfo = Mesh0.AnimationsInfo + 4;
-
-				u32 KeyFrameIndex = 0;
-				f32 AnimationCurrentTime = 0.0f;
-
 				glfwSetTime(0.0);
-
 				f32 StartTime = 0.0f;
 				f32 EndTime = 0.0f;
 				f32 DtForFrame = 0.0f;
 				f32 Angle = 0.0f;
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
-					// NOTE(Justin): Update Animation time
-
-					AnimationCurrentTime += DtForFrame;
-					if(AnimationCurrentTime > AnimInfo->Times[KeyFrameIndex + 1])
-					{
-						KeyFrameIndex++;
-						if(KeyFrameIndex == AnimInfo->TimeCount)
-						{
-							KeyFrameIndex = 0;
-							AnimationCurrentTime = 0.0f;
-						}
-					}
-
 					for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 					{
 						mesh Mesh = Model.Meshes[MeshIndex];
@@ -625,16 +579,7 @@ int main(int Argc, char **Argv)
 							{
 								joint *Joint = Mesh.Joints + Index;
 								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
-#if 0
-								if((s32)Index == AnimInfo->JointIndex)
-								{
-									JointTransform = AnimInfo->Transforms[KeyFrameIndex];
-								}
-								else
-								{
-									JointTransform = *Joint->Transform;
-								}
-#endif
+
 								JointTransform = *Joint->Transform;
 								JointTransform = ParentTransform * JointTransform;
 								mat4 InvBind = Mesh.InvBindTransforms[Index];
