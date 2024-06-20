@@ -364,13 +364,10 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		Controller = *LibControllers.Children[MeshIndex];
 		if(Controller.ChildrenCount != 0)
 		{
-			//Mesh.BindTransform = PushArray(Arena, 1, mat4);
-
 			xml_node BindShape = {};
 			NodeGet(&Controller, &BindShape, "bind_shape_matrix");
 
 			ParseF32Array(&Mesh.BindTransform.E[0][0], 16, BindShape.InnerText);
-			//ParseF32Array((f32 *)Mesh.BindTransform, 16, BindShape.InnerText);
 			ParseColladaStringArray(Arena, &Controller, &Mesh.JointNames, &Mesh.JointCount);
 
 			Assert(Mesh.JointNames);
@@ -472,7 +469,6 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			}
 		}
 
-
 		Model.Meshes[MeshIndex] = Mesh;
 	}
 
@@ -498,35 +494,6 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		AnimationInfoGet(Arena, &LibAnimations, Mesh->JointNames, Mesh->JointCount, Info, &AnimationInfoIndex);
 		Assert(AnimationInfoIndex == Mesh->AnimationInfoCount);
 	}
-
-	//
-	// NOTE(Justin): Visual Scenes (only joint hierarchy)
-	//
-
-#if 0
-	xml_node LibVisScenes = {};
-	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
-	if(LibVisScenes.ChildrenCount != 0)
-	{
-		Mesh->Joints = PushArray(Arena, Mesh->JointCount, joint);
-
-		xml_node JointRoot = {};
-		// TODO(Justin): Better way to get the root joint node in tree.
-		FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
-		if(JointRoot.ChildrenCount != 0)
-		{
-
-			joint *Joints = Mesh->Joints;
-			Joints->Name = Mesh->JointNames[0];
-			Joints->ParentIndex = -1;
-			Joints->Transform = PushArray(Arena, 1, mat4);
-			ParseF32Array((f32 *)Joints->Transform, 16, JointRoot.Children[0]->InnerText);
-
-			u32 JointIndex = 1;
-			JointsGet(Arena, &JointRoot, Mesh->JointNames, Mesh->JointCount, Joints, &JointIndex);
-		}
-	}
-#endif
 
 	return(Model);
 }
