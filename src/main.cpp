@@ -568,7 +568,7 @@ int main(int Argc, char **Argv)
 						mesh Mesh = Model.Meshes[MeshIndex];
 						if(Mesh.JointInfoCount != 0)
 						{
-							mat4 Bind = *Mesh.BindTransform;
+							mat4 Bind = Mesh.BindTransform;
 							mat4 RootJointT = *Mesh.Joints[0].Transform;
 							mat4 RootInvBind = Mesh.InvBindTransforms[0];
 
