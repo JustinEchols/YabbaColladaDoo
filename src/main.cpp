@@ -398,7 +398,7 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Model info
 				//
 
-				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\XBot.dae");
+				loaded_dae MeshDae = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
 
 				model Model = ModelInitFromCollada(Arena, MeshDae);
 
