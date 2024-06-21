@@ -3,21 +3,11 @@
  TODO(Justin):
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [] Better buffering of text using memory arenas
- [] Remove crt functions
+ [] Remove strtok_s
  [] Change children array from fixed size to allocate on demand?
-	[] Is there a way to a priori determine the size (then can allocate)?
-	[] Sparse hash table?
-	[] Dynamic list/array
  [] Mesh initialization
 	[X] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
-		[] Confirm using Phong lighting
-	[] Init a mesh with one tree traversal
-	[] Free or figure out a way to not have to not have to allocate so much when initalizing the mesh
-	[] Traverse the tree once.
-	[] Probably just need to traverse each sub tree that is one level down from the COLLADA node
-	[] Temporary memory? Or just parse the data directly from the inner text?
-	[] Handle more complicated meshes
-	[] Handle meshes with materials
+	[] Use temporary memory when initializing mesh
 	[] Move animation data outside mesh struct
  [] Skeleton initialization
 	[] Library Controllers done in one tree traversal
@@ -25,12 +15,10 @@
 	[X] Library Animations done in one tree traversal
 	[X] Normalize weights so that they are a convex combination
 	[] Instead of storing mat4's for animation, store pos, quat, scale and construct mat4's
-	[] Lerp between key frames using pos, quat, and scale.
-	[] Some meshes may use the same rig some may not need to handle this
+	[] How to determine the skeleton for a mesh?
+	[] Some meshes may use the same rig some may not, need to handle this
 	[] Need a way to organize multiple meshes, controllers, and joint hierarchies.
  [] Write model data to simple file format (mesh/animation/material)
- [] How to determine the skeleton? Instance controller and skeleton node however there can exist more than one
-	skeleton in a collada file.
 */
 
 #include <GL/glew.h>
@@ -53,10 +41,6 @@
 
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
 #define COLLADA_NODE_CHILDREN_MAX_COUNT 75
-
-#define COMPONENT_COUNT_V3 3
-#define COMPONENT_COUNT_N 3
-#define COMPONENT_COUNT_UV 2
 
 #define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
 #define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
@@ -83,7 +67,7 @@ typedef float f32;
 typedef size_t memory_index;
 
 //
-// NOTE(Justin): Bump allocator
+// NOTE(Justin): Arena allocator
 //
 
 struct memory_arena
@@ -177,12 +161,12 @@ uniform mat4 Projection;
 #define MAX_JOINT_COUNT 70
 uniform mat4 Transforms[MAX_JOINT_COUNT];
 
-out vec4 WeightPaint;
+//out vec4 WeightPaint;
 out vec3 N;
 
 void main()
 {
-	WeightPaint = vec4(1 - Weights[0], 1 - Weights[1], 1 - Weights[2], 1.0);
+	//WeightPaint = vec4(1 - Weights[0], 1 - Weights[1], 1 - Weights[2], 1.0);
 	
 	vec4 Pos = vec4(0.0);
 	for(uint i = 0; i < 3; ++i)
@@ -206,12 +190,14 @@ char *BasicFsSrc = R"(
 in vec4 WeightPaint;
 in vec3 N;
 
-uniform vec3 Color;
+//uniform vec3 Color;
+uniform vec4 Diffuse;
 
 out vec4 Result;
 void main()
 {
-	Result = WeightPaint + 0.5f * vec4(N, 1.0);
+	Result = Diffuse + 0.1f * vec4(N, 1.0);
+	//Result = WeightPaint + 0.5f * vec4(N, 1.0);
 })";
 
 internal s32
@@ -363,7 +349,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 	return(Result);
 }
 
-
 int main(int Argc, char **Argv)
 {
 	void *Memory = calloc(Megabyte(256), sizeof(u8));
@@ -456,7 +441,7 @@ int main(int Argc, char **Argv)
 				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
 
 				u32 VA[2];
-				u32 PosVB[2], NormVB[2], TexVB[2], JointInfoVB[2];
+				u32 PosVB[2], NormVB[2], JointInfoVB[2];
 				u32 IBO[2];
 
 				s32 ExpectedAttributeCount = 0;
@@ -562,13 +547,11 @@ int main(int Argc, char **Argv)
 				UniformMatrixSet(ShaderProgram, "Model", ModelTransform);
 				UniformMatrixSet(ShaderProgram, "View", CameraTransform);
 				UniformMatrixSet(ShaderProgram, "Projection", PerspectiveTransform);
-				UniformV3Set(ShaderProgram, "Color", Color);
 
 				glfwSetTime(0.0);
 				f32 StartTime = 0.0f;
 				f32 EndTime = 0.0f;
 				f32 DtForFrame = 0.0f;
-				f32 Angle = 0.0f;
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
 					for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
@@ -582,14 +565,12 @@ int main(int Argc, char **Argv)
 
 							Mesh.JointTransforms[0] = RootJointT;
 							Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
-							mat4 JointTransform = Mat4Identity();
 							for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
 							{
 								joint *Joint = Mesh.Joints + Index;
-								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
 
-								JointTransform = Joint->Transform;
-								JointTransform = ParentTransform * JointTransform;
+								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
+								mat4 JointTransform = ParentTransform * Joint->Transform;
 								mat4 InvBind = Mesh.InvBindTransforms[Index];
 
 								Mesh.JointTransforms[Index] = JointTransform;
@@ -605,11 +586,13 @@ int main(int Argc, char **Argv)
 
 					glBindVertexArray(VA[0]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[0].ModelSpaceTransforms, Model.Meshes[0].JointCount);
+					UniformV4Set(ShaderProgram, "Diffuse", Model.Meshes[0].MaterialSpec.Diffuse);
 					glDrawElements(GL_TRIANGLES, Model.Meshes[0].IndicesCount, GL_UNSIGNED_INT, 0);
 					glBindVertexArray(0);
 
 					glBindVertexArray(VA[1]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[1].ModelSpaceTransforms, Model.Meshes[1].JointCount);
+					UniformV4Set(ShaderProgram, "Diffuse", Model.Meshes[1].MaterialSpec.Diffuse);
 					glDrawElements(GL_TRIANGLES, Model.Meshes[1].IndicesCount, GL_UNSIGNED_INT, 0);
 					glBindVertexArray(0);
 

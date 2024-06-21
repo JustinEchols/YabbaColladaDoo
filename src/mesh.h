@@ -7,6 +7,7 @@ struct joint_info
 	f32 Weights[3];
 };
 
+// TODO(Justin): Do we really need Index?
 struct joint
 {
 	string Name;
@@ -27,12 +28,13 @@ struct animation_info
 	mat4 *Transforms;
 };
 
-struct animation
+struct material_spec
 {
-	string Name;
-	f32 CurrentTime;
-	u32 KeyFrameIndex;
-	animation_info Info;
+	v4 Ambient;
+	v4 Diffuse;
+	v4 Specular;
+
+	f32 Shininess;
 };
 
 // NOTE(Justin): Vertex data in 1-1 correspondence is
@@ -49,6 +51,8 @@ struct animation
 // JointTransforms
 // ModelSpaceTransforms
 
+// TODO(Justin): Think about removing Weights. They are already stored in
+// joint_info for each vertex.
 struct mesh
 {
 	string Name;
@@ -79,6 +83,8 @@ struct mesh
 	mat4 *ModelSpaceTransforms;
 
 	animation_info *AnimationsInfo;
+
+	material_spec MaterialSpec;
 };
 
 struct model
@@ -89,6 +95,9 @@ struct model
 	mesh *Meshes;
 
 	// TODO(Justin): OpenGL info here.
+
+	//u32 AnimationInfoCount;
+	//animation_info *AnimationsInfo;
 };
 
 #define MESH_H

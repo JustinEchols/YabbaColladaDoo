@@ -54,11 +54,9 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 Jo
 		else if(StringsAreSame(Node->Tag, "animation"))
 		{
 			// TODO(Justin): Figure out a way to get the joint name
-			string JointName = NodeAttributeValueGet(Node, "name");
-
 			animation_info *Info = AnimationInfo + *AnimationInfoIndex;
 
-			Info->JointName = StringAllocAndCopy(Arena, JointName);
+			Info->JointName = NodeAttributeValueGet(Node, "name");
 			Info->JointIndex = JointIndexGet(JointNames, JointCount, Info->JointName);
 		}
 		else if(StringsAreSame(Node->Tag, "channel"))
@@ -130,9 +128,13 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 	xml_node *Root = DaeFile.Root;
 
+	xml_node LibMaterials = {};
+	xml_node LibEffects = {};
 	xml_node LibGeometry = {};
 	xml_node Triangles = {};
 
+	NodeGet(Root, &LibMaterials, "library_materials");
+	NodeGet(Root, &LibEffects, "library_effects");
 	NodeGet(Root, &LibGeometry, "library_geometries");
 
 	//
@@ -150,10 +152,47 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	{
 		mesh Mesh = {};
 
+		xml_node *Mat = LibMaterials.Children[MeshIndex];
+		string EffectNodeName = NodeAttributeValueGet(Mat->Children[0], "url");
+		EffectNodeName.Data++;
+		EffectNodeName.Size--;
+
+		xml_node Effect = {};
+		xml_node Phong = {};
+		NodeGet(Root, &Effect, "effect", (char *)EffectNodeName.Data);
+		NodeGet(&Effect, &Phong, "phong");
+
+		for(s32 k = 0; k < Phong.ChildrenCount; ++k)
+		{
+			xml_node *Child = Phong.Children[k];
+			if(StringsAreSame(Child->Tag, "ambient"))
+			{
+				xml_node Color = *Child->Children[0];
+				ParseF32Array(&Mesh.MaterialSpec.Ambient.E[0], 4, Color.InnerText);
+			}
+
+			if(StringsAreSame(Child->Tag, "diffuse"))
+			{
+				xml_node Color = *Child->Children[0];
+				ParseF32Array(&Mesh.MaterialSpec.Diffuse.E[0], 4, Color.InnerText);
+			}
+
+			if(StringsAreSame(Child->Tag, "specular"))
+			{
+				xml_node Color = *Child->Children[0];
+				ParseF32Array(&Mesh.MaterialSpec.Specular.E[0], 4, Color.InnerText);
+			}
+
+			if(StringsAreSame(Child->Tag, "shininess"))
+			{
+				xml_node Color = *Child->Children[0];
+				Mesh.MaterialSpec.Shininess = F32FromASCII(Color.InnerText);
+			}
+		}
+
 		xml_node *Geometry = LibGeometry.Children[MeshIndex];
 
-		string MeshName = NodeAttributeValueGet(Geometry, "name");
-		Mesh.Name = StringAllocAndCopy(Arena, MeshName);
+		Mesh.Name = NodeAttributeValueGet(Geometry, "name");
 
 		xml_node *MeshNode = Geometry->Children[0];
 		Triangles = *MeshNode->Children[MeshNode->ChildrenCount - 1];
@@ -450,12 +489,29 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		{
 			Mesh.Joints = PushArray(Arena, Mesh.JointCount, joint);
 
+			//
+			// NOTE(Justin): The last nodes of visual scene contain the name of the
+			// node where the root joint of the joint hierarchy can be found.
+			// This is in the <skeleton> node. This approach also assumes they
+			// are in mesh order. Meaning the last skeleton is the skeleton of
+			// the last mesh. the second to last skeleton is the skeleton of
+			// the second to last mesh and so on.
+			//
+
+			u32 ChildIndex = (LibVisScenes.Children[0]->ChildrenCount - Model.MeshCount) + MeshIndex;
+			xml_node Node = *LibVisScenes.Children[0]->Children[ChildIndex];
+
+			xml_node Skeleton = {};
+			NodeGet(&Node, &Skeleton, "skeleton");
+
+			string JointRootName = Skeleton.InnerText;
+			JointRootName.Data++;
+			JointRootName.Size--;
+
 			xml_node JointRoot = {};
-			// TODO(Justin): Better way to get the root joint node in tree.
-			FirstNodeWithAttrValue(&LibVisScenes, &JointRoot, "JOINT");
+			NodeGet(&LibVisScenes, &JointRoot, "node", (char *)JointRootName.Data);
 			if(JointRoot.ChildrenCount != 0)
 			{
-
 				joint *Joints = Mesh.Joints;
 				Joints->Name = Mesh.JointNames[0];
 				Joints->ParentIndex = -1;
