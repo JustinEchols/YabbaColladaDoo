@@ -24,18 +24,6 @@ GLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei 
 	printf("OpenGL Debug Callback: %s\n", Message);
 }
 
-// TODO(Justin): Either pass in a void pointer or a type then cast 
-internal void
-GLVbInitAndPopulate(u32 *VB, u32 VA, u32 Index, u32 ComponentCount, f32 *BufferData, u32 TotalCount)
-{
-	glGenBuffers(1, VB);
-	glBindBuffer(GL_ARRAY_BUFFER, *VB);
-	glBufferData(GL_ARRAY_BUFFER, TotalCount * sizeof(f32), BufferData, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(Index, ComponentCount, GL_FLOAT, GL_FALSE, 0, (void *)0);
-	glEnableVertexAttribArray(Index);
-}
-
 internal void
 GLIBOInit(u32 *IBO, u32 *Indices, u32 IndicesCount)
 {
@@ -120,6 +108,12 @@ UniformV3Set(u32 ShaderProgram, char *UniformName, v3 V)
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
 	glUniform3fv(UniformLocation, 1, &V.E[0]);
 }
+internal void
+UniformV4Set(u32 ShaderProgram, char *UniformName, v4 V)
+{
+	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	glUniform4fv(UniformLocation, 1, &V.E[0]);
+}
 
 internal void
 UniformMatrixArraySet(u32 ShaderProgram, char *UniformName, mat4 *M, u32 Count)
@@ -133,26 +127,4 @@ UniformMatrixSet(u32 ShaderProgram, char *UniformName, mat4 M)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
 	glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &M.E[0][0]);
-}
-
-internal void
-AttributesInterleave(f32 *BufferData, mesh *Mesh)
-{
-	u32 BufferIndex = 0;
-
-	u32 Stride = 3;
-	u32 UVStride = 2;
-	for(u32 Index = 0; Index < Mesh->PositionsCount/3; ++Index)
-	{
-		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index];
-		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index + 1];
-		BufferData[BufferIndex++] = Mesh->Positions[Stride * Index + 2];
-
-		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index];
-		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index + 1];
-		BufferData[BufferIndex++] = Mesh->Normals[Stride * Index + 2];
-
-		BufferData[BufferIndex++] = Mesh->UV[UVStride * Index];
-		BufferData[BufferIndex++] = Mesh->UV[UVStride * Index + 1];
-	}
 }
