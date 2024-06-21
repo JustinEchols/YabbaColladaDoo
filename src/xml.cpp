@@ -14,6 +14,19 @@ PushXMLNode(memory_arena *Arena, xml_node *Parent)
 	return(Node);
 }
 
+internal xml_node *
+ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
+{
+	xml_node *LastChild = PushXMLNode(Arena, Parent);
+
+	Parent->Children[Parent->ChildrenCount] = LastChild;
+	Parent->ChildrenCount++;
+
+	Assert(Parent->ChildrenCount < COLLADA_NODE_CHILDREN_MAX_COUNT);
+
+	return(LastChild);
+}
+
 internal xml_attribute
 NodeAttributeGet(xml_node *Node, char *AttrName)
 {
@@ -38,23 +51,6 @@ NodeAttributeValueGet(xml_node *Node, char *AttrName)
 
 	xml_attribute Attr = NodeAttributeGet(Node, AttrName);
 	Result = Attr.Value;
-
-	return(Result);
-}
-
-internal b32 
-NodeAttributeValueExists(xml_node *Node, char *AttrValue)
-{
-	b32 Result = false;
-	string Value = String((u8 *)AttrValue);
-	for(s32 Index = 0; Index < Node->AttributeCount; ++Index)
-	{
-		xml_attribute *Attr = Node->Attributes + Index;
-		if(StringsAreSame(Attr->Value, Value)) 
-		{
-			Result = true;
-		}
-	}
 
 	return(Result);
 }
@@ -102,9 +98,11 @@ NodeSourceGet(xml_node *Root, char *TagName, char *ID)
 
 	xml_node N = {};
 	NodeGet(Root, &N, TagName, ID);
+
 	string SourceName = NodeAttributeValueGet(&N, "source");
 	Assert(SourceName.Size != 0);
 	SourceName.Data++;
+	SourceName.Size--;
 
 	N = {};
 	NodeGet(Root, &N, "source", (char *)SourceName.Data);
@@ -112,43 +110,6 @@ NodeSourceGet(xml_node *Root, char *TagName, char *ID)
 	Result = *(N.Children[0]);
 
 	return(Result);
-}
-
-internal void
-FirstNodeWithAttrValue(xml_node *Root, xml_node *N, char *AttrValue)
-{
-	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
-	{
-		if(N->Tag.Size == 0)
-		{
-			xml_node *Node = Root->Children[Index];
-			if(NodeAttributeValueExists(Node, AttrValue))
-			{
-				*N = *Node;
-			}
-			else if(*Node->Children)
-			{
-				FirstNodeWithAttrValue(Node, N, AttrValue);
-			}
-		}
-		else
-		{
-			break;
-		}
-	}
-}
-
-internal xml_node *
-ChildNodeAdd(memory_arena *Arena, xml_node *Parent)
-{
-	xml_node *LastChild = PushXMLNode(Arena, Parent);
-
-	Parent->Children[Parent->ChildrenCount] = LastChild;
-	Parent->ChildrenCount++;
-
-	Assert(Parent->ChildrenCount < COLLADA_NODE_CHILDREN_MAX_COUNT);
-
-	return(LastChild);
 }
 
 internal b32
@@ -255,8 +216,6 @@ ParseColladaStringArray(memory_arena *Arena, xml_node *Root, string **Dest, u32 
 	ParseStringArray(Arena, *Dest, *DestCount, TargetNode.InnerText);
 }
 
-
-// NOTE(Justin): The API for this routine is slightly different than the others.
 internal void
 ParseColladaU32Array(memory_arena *Arena, xml_node *Root, u32 **Dest, u32 DestCount, char *U32ArrayName)
 {
