@@ -171,7 +171,6 @@ StringSplit(memory_arena *Arena, string String, u8 *Splits, u32 Count)
 	return(Result);
 }
 
-
 inline s32
 S32FromASCII(u8 *S)
 {
@@ -182,7 +181,7 @@ S32FromASCII(u8 *S)
 inline u32
 U32FromASCII(u8 *S)
 {
-	u32 Result = (u32 )atoi((char *)S);
+	u32 Result = (u32)atoi((char *)S);
 	return(Result);
 }
 
@@ -190,6 +189,13 @@ inline f32
 F32FromASCII(u8 *S)
 {
 	f32 Result = (f32)atof((char *)S);
+	return(Result);
+}
+
+inline f32
+F32FromASCII(string S)
+{
+	f32 Result = F32FromASCII(S.Data);
 	return(Result);
 }
 
@@ -255,24 +261,8 @@ ParseF32Array(memory_arena *Arena, f32 *Dest, u32 DestCount, string Str)
 				Dest[Index] = F32FromASCII((u8 *)Token->String.Data);
 			}
 		}
-
-#if 0
-		char *Context;
-		char *Tok = strtok_s((char *)Str.Data, " \n\r", &Context);
-		Dest[0] = F32FromASCII((u8 *)Tok);
-		for(u32 Index = 1; Index < DestCount; ++Index)
-		{
-			Tok = strtok_s(0, " \n\r", &Context);
-			if(Tok)
-			{
-				Dest[Index] = F32FromASCII((u8 *)Tok);
-			}
-		}
-#endif
 	}
 }
-
-
 
 internal string
 StringAllocAndCopy(memory_arena *Arena, string Str)
@@ -319,6 +309,5 @@ ParseStringArray(memory_arena *Arena, string *Dest, u32 DestCount, string Str)
 				Dest[Index++] = StringAllocAndCopy(Arena, Tok);
 			}
 		}
-
 	}
 }
