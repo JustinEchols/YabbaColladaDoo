@@ -416,8 +416,6 @@ int main(int Argc, char **Argv)
 				Model.Basis.Y = YAxis();
 				Model.Basis.Z = ZAxis();
 
-				v3 Color = V3(1.0f, 0.5f, 0.31f);
-
 				//
 				// NOTE(Justin): Transformations
 				//
@@ -452,7 +450,7 @@ int main(int Argc, char **Argv)
 				//
 
 				mesh Mesh0 = Model.Meshes[0];
-				mesh *Mesh1 = &Model.Meshes[1];
+				mesh Mesh1 = Model.Meshes[1];
 
 				u32 ShaderProgram = GLProgramCreate(BasicVsSrc, BasicFsSrc);
 
@@ -520,21 +518,21 @@ int main(int Argc, char **Argv)
 
 				glGenBuffers(1, &PosVB[1]);
 				glBindBuffer(GL_ARRAY_BUFFER, PosVB[1]);
-				glBufferData(GL_ARRAY_BUFFER, Mesh1->PositionsCount * sizeof(f32), Mesh1->Positions, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1.PositionsCount * sizeof(f32), Mesh1.Positions, GL_STATIC_DRAW);
 				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 				glEnableVertexAttribArray(0);
 				ExpectedAttributeCount++;
 
 				glGenBuffers(1, &NormVB[1]);
 				glBindBuffer(GL_ARRAY_BUFFER, NormVB[1]);
-				glBufferData(GL_ARRAY_BUFFER, Mesh1->NormalsCount * sizeof(f32), Mesh1->Normals, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1.NormalsCount * sizeof(f32), Mesh1.Normals, GL_STATIC_DRAW);
 				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 				glEnableVertexAttribArray(1);
 				ExpectedAttributeCount++;
 
 				glGenBuffers(1, &JointInfoVB[1]);
 				glBindBuffer(GL_ARRAY_BUFFER, JointInfoVB[1]);
-				glBufferData(GL_ARRAY_BUFFER, Mesh1->JointInfoCount * sizeof(joint_info), Mesh1->JointsInfo, GL_STATIC_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, Mesh1.JointInfoCount * sizeof(joint_info), Mesh1.JointsInfo, GL_STATIC_DRAW);
 
 				glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(joint_info), 0);
 				glVertexAttribIPointer(3, 3, GL_UNSIGNED_INT, sizeof(joint_info), (void *)(1 * sizeof(u32)));
@@ -545,7 +543,7 @@ int main(int Argc, char **Argv)
 				glEnableVertexAttribArray(4);
 				ExpectedAttributeCount += 3;
 
-				GLIBOInit(&IBO[1], Mesh1->Indices, Mesh1->IndicesCount);
+				GLIBOInit(&IBO[1], Mesh1.Indices, Mesh1.IndicesCount);
 				glBindVertexArray(0);
 
 				glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
