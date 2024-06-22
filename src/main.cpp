@@ -161,13 +161,10 @@ uniform mat4 Projection;
 #define MAX_JOINT_COUNT 70
 uniform mat4 Transforms[MAX_JOINT_COUNT];
 
-//out vec4 WeightPaint;
 out vec3 N;
 
 void main()
 {
-	//WeightPaint = vec4(1 - Weights[0], 1 - Weights[1], 1 - Weights[2], 1.0);
-	
 	vec4 Pos = vec4(0.0);
 	for(uint i = 0; i < 3; ++i)
 	{
@@ -187,17 +184,36 @@ void main()
 char *BasicFsSrc = R"(
 #version 430 core
 
-in vec4 WeightPaint;
 in vec3 N;
 
-//uniform vec3 Color;
 uniform vec4 Diffuse;
+uniform vec4 Specular;
+uniform float Shininess;
+
+uniform vec3 LightDir;
+uniform vec3 CameraP;
 
 out vec4 Result;
 void main()
 {
-	Result = Diffuse + 0.1f * vec4(N, 1.0);
-	//Result = WeightPaint + 0.5f * vec4(N, 1.0);
+	vec3 LightColor = vec3(1.0);
+	vec3 Normal = normalize(N);
+	bool FacingTowards = dot(Normal, LightDir) > 0.0;
+
+	vec3 Diff = vec3(0.0);
+	vec3 Spec = vec3(0.0);
+	if(FacingTowards)
+	{
+		float D = max(dot(Normal, LightDir), 0.0);
+		Diff = LightColor * D * Diffuse.xyz;
+
+		vec3 ViewDir = normalize(CameraP);
+		vec3 R = reflect(LightDir, Normal);
+		float S = pow(max(dot(ViewDir, R), 0.0), Shininess);
+		Spec = LightColor * S * Specular.xyz;
+	}
+
+	Result = vec4(Diff + Spec, 1.0);
 })";
 
 internal s32
@@ -547,13 +563,19 @@ int main(int Argc, char **Argv)
 				UniformMatrixSet(ShaderProgram, "Model", ModelTransform);
 				UniformMatrixSet(ShaderProgram, "View", CameraTransform);
 				UniformMatrixSet(ShaderProgram, "Projection", PerspectiveTransform);
+				UniformV3Set(ShaderProgram, "CameraP", CameraP);
 
 				glfwSetTime(0.0);
 				f32 StartTime = 0.0f;
 				f32 EndTime = 0.0f;
 				f32 DtForFrame = 0.0f;
+				f32 Angle = 0.0f;
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
+					//
+					// NOTE(Justin): Skeletal transformations.
+					//
+
 					for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 					{
 						mesh Mesh = Model.Meshes[MeshIndex];
@@ -582,17 +604,28 @@ int main(int Argc, char **Argv)
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+					//
+					// NOTE(Jusitn): Simulate light movement
+					//
+
 					glUseProgram(ShaderProgram);
+
+					Angle += DtForFrame;
+					UniformV3Set(ShaderProgram, "LightDir", V3(2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle)));
 
 					glBindVertexArray(VA[0]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[0].ModelSpaceTransforms, Model.Meshes[0].JointCount);
 					UniformV4Set(ShaderProgram, "Diffuse", Model.Meshes[0].MaterialSpec.Diffuse);
+					UniformV4Set(ShaderProgram, "Specular", Model.Meshes[0].MaterialSpec.Specular);
+					UniformF32Set(ShaderProgram, "Shininess", Model.Meshes[0].MaterialSpec.Shininess);
 					glDrawElements(GL_TRIANGLES, Model.Meshes[0].IndicesCount, GL_UNSIGNED_INT, 0);
 					glBindVertexArray(0);
 
 					glBindVertexArray(VA[1]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[1].ModelSpaceTransforms, Model.Meshes[1].JointCount);
 					UniformV4Set(ShaderProgram, "Diffuse", Model.Meshes[1].MaterialSpec.Diffuse);
+					UniformV4Set(ShaderProgram, "Specular", Model.Meshes[1].MaterialSpec.Specular);
+					UniformF32Set(ShaderProgram, "Shininess", Model.Meshes[1].MaterialSpec.Shininess);
 					glDrawElements(GL_TRIANGLES, Model.Meshes[1].IndicesCount, GL_UNSIGNED_INT, 0);
 					glBindVertexArray(0);
 
