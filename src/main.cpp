@@ -2,9 +2,7 @@
 /*
  TODO(Justin):
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
- [] Better buffering of text using memory arenas
  [] Remove strtok_s
- [] Change children array from fixed size to allocate on demand?
  [] Mesh initialization
 	[X] Parse normals and uvs such that they are in 1-1 correspondence with the vertex positions (not so for collada files) 
 	[] Use temporary memory when initializing mesh
@@ -15,7 +13,6 @@
 	[X] Library Animations done in one tree traversal
 	[X] Normalize weights so that they are a convex combination
 	[] Instead of storing mat4's for animation, store pos, quat, scale and construct mat4's
-	[] How to determine the skeleton for a mesh?
 	[] Some meshes may use the same rig some may not, need to handle this
 	[] Need a way to organize multiple meshes, controllers, and joint hierarchies.
  [] Write model data to simple file format (mesh/animation/material)
@@ -399,17 +396,17 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Model info
 				//
 
-				loaded_dae MeshDae = {};
+				loaded_dae LoadedDAE = {};
 				if(Argc == 2)
 				{
-					MeshDae = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
+					LoadedDAE = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
 				}
 				else
 				{
-					MeshDae = ColladaFileLoad(Arena, "..\\data\\XBot.dae");
+					LoadedDAE = ColladaFileLoad(Arena, "..\\data\\XBot.dae");
 				}
 
-				model Model = ModelInitFromCollada(Arena, MeshDae);
+				model Model = ModelInitFromCollada(Arena, LoadedDAE);
 
 				Model.Basis.O = V3(0.0f, -80.0f, -250.0f);
 				Model.Basis.X = XAxis();
@@ -599,12 +596,12 @@ int main(int Argc, char **Argv)
 						}
 					}
 
+					//
+					// NOTE(Justin): Render.
+					//
+
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-					//
-					// NOTE(Jusitn): Simulate light movement
-					//
 
 					glUseProgram(ShaderProgram);
 
