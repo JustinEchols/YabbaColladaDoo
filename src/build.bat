@@ -10,3 +10,4 @@ IF NOT EXIST ..\build mkdir ..\build
 pushd ..\build
 
 cl ..\src\%MainFile% %CommonCompilerFlags% %IncludeDirectories% /link /NODEFAULTLIB:"LIBCMT" %LibDirectories% %CommonLinkerFlags%
+popd
