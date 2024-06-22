@@ -17,6 +17,7 @@ The number of attributes of a node is set to a compile time constant COLLADA_ATT
 
 ## Dependencies
 GLFW and GLEW which facilitate rendering tests via OpenGL.
+
 Visual Studio 2019 if you intend to use the build.bat file to build.
 
 ## Setup
