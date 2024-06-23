@@ -55,6 +55,17 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationI
 		string Count = NodeAttributeValueGet(&N, "count");
 		u32 TimeCount = U32FromASCII(Count.Data);
 
+		if(ChildIndex == 0)
+		{
+			AnimationInfo->TimeCount = TimeCount;
+			AnimationInfo->TransformCount = TimeCount;
+		}
+		else
+		{
+			Assert(AnimationInfo->TimeCount == TimeCount);
+			Assert(AnimationInfo->TransformCount == TimeCount);
+		}
+
 		AnimationInfo->Times[AnimationInfoIndex] = PushArray(Arena, TimeCount, f32);
 		ParseF32Array(AnimationInfo->Times[AnimationInfoIndex], TimeCount, N.InnerText);
 
@@ -304,8 +315,8 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			UniqueIndexTable[i] = true;
 		}
 
-		u32 StrideP = 3;
-		u32 StrideUV = 2;
+		u32 Stride3 = 3;
+		u32 Stride2 = 2;
 		if(AttributeCount == 2)
 		{
 			for(u32 i = 0; i < IndicesCount; i += AttributeCount)
@@ -316,21 +327,21 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 				{
 					u32 IndexN = Indices[i + 1];
 
-					f32 X = Positions[StrideP * IndexP];
-					f32 Y = Positions[StrideP * IndexP + 1];
-					f32 Z = Positions[StrideP * IndexP + 2];
+					f32 X = Positions[Stride3 * IndexP];
+					f32 Y = Positions[Stride3 * IndexP + 1];
+					f32 Z = Positions[Stride3 * IndexP + 2];
 
-					f32 Nx = Normals[StrideP * IndexN];
-					f32 Ny = Normals[StrideP * IndexN + 1];
-					f32 Nz = Normals[StrideP * IndexN + 2];
+					f32 Nx = Normals[Stride3 * IndexN];
+					f32 Ny = Normals[Stride3 * IndexN + 1];
+					f32 Nz = Normals[Stride3 * IndexN + 2];
 
-					Mesh.Positions[StrideP * IndexP] = X;
-					Mesh.Positions[StrideP * IndexP + 1] = Y;
-					Mesh.Positions[StrideP * IndexP + 2] = Z;
+					Mesh.Positions[Stride3 * IndexP] = X;
+					Mesh.Positions[Stride3 * IndexP + 1] = Y;
+					Mesh.Positions[Stride3 * IndexP + 2] = Z;
 
-					Mesh.Normals[StrideP * IndexP] = Nx;
-					Mesh.Normals[StrideP * IndexP + 1] = Ny;
-					Mesh.Normals[StrideP * IndexP + 2] = Nz;
+					Mesh.Normals[Stride3 * IndexP] = Nx;
+					Mesh.Normals[Stride3 * IndexP + 1] = Ny;
+					Mesh.Normals[Stride3 * IndexP + 2] = Nz;
 
 					UniqueIndexTable[IndexP] = false;
 				}
@@ -348,27 +359,27 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 					u32 IndexN = Indices[i + 1];
 					u32 IndexUV = Indices[i + 2];
 
-					f32 X = Positions[StrideP * IndexP];
-					f32 Y = Positions[StrideP * IndexP + 1];
-					f32 Z = Positions[StrideP * IndexP + 2];
+					f32 X = Positions[Stride3 * IndexP];
+					f32 Y = Positions[Stride3 * IndexP + 1];
+					f32 Z = Positions[Stride3 * IndexP + 2];
 
-					f32 Nx = Normals[StrideP * IndexN];
-					f32 Ny = Normals[StrideP * IndexN + 1];
-					f32 Nz = Normals[StrideP * IndexN + 2];
+					f32 Nx = Normals[Stride3 * IndexN];
+					f32 Ny = Normals[Stride3 * IndexN + 1];
+					f32 Nz = Normals[Stride3 * IndexN + 2];
 
-					f32 U = UV[StrideUV * IndexUV];
-					f32 V = UV[StrideUV * IndexUV + 1];
+					f32 U = UV[Stride2 * IndexUV];
+					f32 V = UV[Stride2 * IndexUV + 1];
 
-					Mesh.Positions[StrideP * IndexP] = X;
-					Mesh.Positions[StrideP * IndexP + 1] = Y;
-					Mesh.Positions[StrideP * IndexP + 2] = Z;
+					Mesh.Positions[Stride3 * IndexP] = X;
+					Mesh.Positions[Stride3 * IndexP + 1] = Y;
+					Mesh.Positions[Stride3 * IndexP + 2] = Z;
 
-					Mesh.Normals[StrideP * IndexP] = Nx;
-					Mesh.Normals[StrideP * IndexP + 1] = Ny;
-					Mesh.Normals[StrideP * IndexP + 2] = Nz;
+					Mesh.Normals[Stride3 * IndexP] = Nx;
+					Mesh.Normals[Stride3 * IndexP + 1] = Ny;
+					Mesh.Normals[Stride3 * IndexP + 2] = Nz;
 
-					Mesh.UV[StrideUV * IndexP] = U;
-					Mesh.UV[StrideUV * IndexP + 1] = V;
+					Mesh.UV[Stride2 * IndexP] = U;
+					Mesh.UV[Stride2 * IndexP + 1] = V;
 
 					UniqueIndexTable[IndexP] = false;
 				}
@@ -527,9 +538,6 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	// NOTE(Justin): Animations
 	//
 	
-	// NOTE(Justin): The next to last node of an animation node APPEARS to be the
-	// sampler node which tells what the input and output nodes are.
-
 	xml_node LibAnimations = {};
 	NodeGet(Root, &LibAnimations, "library_animations");
 	if(LibAnimations.ChildrenCount != 0)
