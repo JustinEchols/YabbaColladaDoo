@@ -101,7 +101,6 @@ UniformF32Set(u32 ShaderProgram, char *UniformName, f32 F32)
 	glUniform1f(UniformLocation, F32);
 }
 
-
 internal void
 UniformV3Set(u32 ShaderProgram, char *UniformName, v3 V)
 {
