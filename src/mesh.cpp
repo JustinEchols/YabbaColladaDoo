@@ -523,8 +523,6 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		Model.Meshes[MeshIndex] = Mesh;
 	}
 
-	//mesh *Mesh = Model.Meshes;
-
 	//
 	// NOTE(Justin): Animations
 	//
@@ -536,25 +534,12 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(Root, &LibAnimations, "library_animations");
 	if(LibAnimations.ChildrenCount != 0)
 	{
-
 		Model.AnimationsInfo.JointCount = LibAnimations.ChildrenCount;
 		Model.AnimationsInfo.JointNames = PushArray(Arena, Model.AnimationsInfo.JointCount, string); 
 		Model.AnimationsInfo.Times = PushArray(Arena, Model.AnimationsInfo.JointCount, f32 *);
 		Model.AnimationsInfo.Transforms = PushArray(Arena, Model.AnimationsInfo.JointCount, mat4 *);
 
 		AnimationInfoGet(Arena, &LibAnimations, &Model.AnimationsInfo);
-#if 0
-		Model.AnimationInfoCount = LibAnimations.ChildrenCount;
-		Model.AnimationsInfo = PushArray(Arena, Model.AnimationInfoCount, animation_info);
-
-		u32 AnimationInfoIndex = 0;
-		animation_info *Info = Model.AnimationsInfo;
-
-		AnimationInfoGet(Arena, &LibAnimations, Model.Meshes[0].JointNames, Model.Meshes[0].JointCount, Info, &AnimationInfoIndex);
-		//Assert(AnimationInfoIndex == Model.AnimationsInfo.JointCount);
-#endif
-
-		// TODO(Justin): Do we still want to do an assert here for safe measure?
 	}
 
 	return(Model);
