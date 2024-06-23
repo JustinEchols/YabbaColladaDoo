@@ -1,6 +1,7 @@
 
 /*
  TODO(Justin):
+ [] Remove dependencies GLFW and GLEW
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [] Remove strtok_s
  [] Mesh initialization
@@ -397,15 +398,7 @@ int main(int Argc, char **Argv)
 				//
 
 				loaded_dae LoadedDAE = {};
-				if(Argc == 2)
-				{
-					LoadedDAE = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
-				}
-				else
-				{
-					LoadedDAE = ColladaFileLoad(Arena, "..\\data\\XBot.dae");
-				}
-
+				LoadedDAE = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
 				model Model = ModelInitFromCollada(Arena, LoadedDAE);
 
 				Model.Basis.O = V3(0.0f, -80.0f, -250.0f);
@@ -565,11 +558,26 @@ int main(int Argc, char **Argv)
 				f32 EndTime = 0.0f;
 				f32 DtForFrame = 0.0f;
 				f32 Angle = 0.0f;
+
+				f32 AnimationCurrentTime = 0.0f;
+				u32 KeyFrameIndex = 0;
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
 					//
 					// NOTE(Justin): Skeletal transformations.
 					//
+
+					AnimationCurrentTime += DtForFrame;
+					if(AnimationCurrentTime > 0.03f)
+					{
+						KeyFrameIndex += 1;
+						if(KeyFrameIndex >= 500)
+						{
+							KeyFrameIndex = 0;
+						}
+
+						AnimationCurrentTime = 0.0f;
+					}
 
 					for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 					{
@@ -577,17 +585,32 @@ int main(int Argc, char **Argv)
 						if(Mesh.JointInfoCount != 0)
 						{
 							mat4 Bind = Mesh.BindTransform;
-							mat4 RootJointT = Mesh.Joints[0].Transform;
+
+							joint RootJoint = Mesh.Joints[0];
+							mat4 RootJointT = RootJoint.Transform;
 							mat4 RootInvBind = Mesh.InvBindTransforms[0];
+
+							u32 JointIndex = JointIndexGet(Model.AnimationsInfo.JointNames, Model.AnimationsInfo.JointCount, RootJoint.Name);
+							if(JointIndex != -1)
+							{
+								RootJointT = Model.AnimationsInfo.Transforms[JointIndex][KeyFrameIndex];
+							}
 
 							Mesh.JointTransforms[0] = RootJointT;
 							Mesh.ModelSpaceTransforms[0] = RootJointT * RootInvBind * Bind;
 							for(u32 Index = 1; Index < Mesh.JointCount; ++Index)
 							{
 								joint *Joint = Mesh.Joints + Index;
+								mat4 JointTransform = Joint->Transform;
+
+								JointIndex = JointIndexGet(Model.AnimationsInfo.JointNames, Model.AnimationsInfo.JointCount, Joint->Name);
+								if(JointIndex != -1)
+								{
+									JointTransform = Model.AnimationsInfo.Transforms[JointIndex][KeyFrameIndex];
+								}
 
 								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
-								mat4 JointTransform = ParentTransform * Joint->Transform;
+								JointTransform = ParentTransform * JointTransform;
 								mat4 InvBind = Mesh.InvBindTransforms[Index];
 
 								Mesh.JointTransforms[Index] = JointTransform;
@@ -607,6 +630,7 @@ int main(int Argc, char **Argv)
 
 					Angle += DtForFrame;
 					UniformV3Set(ShaderProgram, "LightDir", V3(2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle)));
+					//UniformV3Set(ShaderProgram, "LightDir", V3(-1.0f, 0.0f, 1.0f));
 
 					glBindVertexArray(VA[0]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[0].ModelSpaceTransforms, Model.Meshes[0].JointCount);

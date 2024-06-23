@@ -16,6 +16,7 @@ JointIndexGet(string *JointNames, u32 JointCount, string JointName)
 	return(Result);
 }
 
+#if 0
 internal void
 AnimationInfoGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount, animation_info *AnimationInfo, u32 *AnimationInfoIndex)
 {
@@ -70,6 +71,61 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 Jo
 		}
 	}
 }
+#else
+
+internal void
+AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationInfo)
+{
+	u32 AnimationInfoIndex = 0;
+	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
+	{
+		xml_node *Node = Root->Children[ChildIndex];
+		Assert(StringsAreSame(Node->Tag, "animation"));
+
+		string JointName = NodeAttributeValueGet(Node, "name");
+		AnimationInfo->JointNames[AnimationInfoIndex] = JointName;
+
+		//
+		// NOTE(Justin): I have only made the observation that the second to
+		// last node in an animation node is the sampler node. I do not have a
+		// complete understanding of the Collada spec to say with certainty that
+		// THIS IS ALWAYS TRUE.
+		//
+
+		xml_node Sampler = *Node->Children[Node->ChildrenCount - 2];
+		xml_node Input = *Sampler.Children[0];
+		xml_node Output = *Sampler.Children[1];
+
+		string InputSrcName = NodeAttributeValueGet(&Input, "source");
+		string OutputSrcName = NodeAttributeValueGet(&Output, "source");
+
+		InputSrcName.Data++;
+		OutputSrcName.Data++;
+
+		InputSrcName.Size--;
+		OutputSrcName.Size--;
+
+		xml_node N = {};
+		NodeGet(Node, &N, "source", (char *)InputSrcName.Data);
+		N = *N.Children[0];
+
+		string Count = NodeAttributeValueGet(&N, "count");
+		u32 TimeCount = U32FromASCII(Count.Data);
+
+		AnimationInfo->Times[AnimationInfoIndex] = PushArray(Arena, TimeCount, f32);
+		ParseF32Array(AnimationInfo->Times[AnimationInfoIndex], TimeCount, N.InnerText);
+
+		N = {};
+		NodeGet(Node, &N, "source", (char *)OutputSrcName.Data);
+		N = *N.Children[0];
+
+		AnimationInfo->Transforms[AnimationInfoIndex] = PushArray(Arena, TimeCount * 16, mat4);
+		ParseF32Array((f32 *)AnimationInfo->Transforms[AnimationInfoIndex], TimeCount * 16, N.InnerText);
+
+		AnimationInfoIndex++;
+	}
+}
+#endif
 
 internal void
 JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount, joint *Joints, u32 *JointIndex)
@@ -525,7 +581,7 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		Model.Meshes[MeshIndex] = Mesh;
 	}
 
-	mesh *Mesh = Model.Meshes;
+	//mesh *Mesh = Model.Meshes;
 
 	//
 	// NOTE(Justin): Animations
@@ -538,14 +594,25 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(Root, &LibAnimations, "library_animations");
 	if(LibAnimations.ChildrenCount != 0)
 	{
-		Mesh->AnimationInfoCount = LibAnimations.ChildrenCount;
-		Mesh->AnimationsInfo = PushArray(Arena, Mesh->AnimationInfoCount, animation_info);
+
+		Model.AnimationsInfo.JointCount = LibAnimations.ChildrenCount;
+		Model.AnimationsInfo.JointNames = PushArray(Arena, Model.AnimationsInfo.JointCount, string); 
+		Model.AnimationsInfo.Times = PushArray(Arena, Model.AnimationsInfo.JointCount, f32 *);
+		Model.AnimationsInfo.Transforms = PushArray(Arena, Model.AnimationsInfo.JointCount, mat4 *);
+
+		AnimationInfoGet(Arena, &LibAnimations, &Model.AnimationsInfo);
+#if 0
+		Model.AnimationInfoCount = LibAnimations.ChildrenCount;
+		Model.AnimationsInfo = PushArray(Arena, Model.AnimationInfoCount, animation_info);
 
 		u32 AnimationInfoIndex = 0;
-		animation_info *Info = Mesh->AnimationsInfo;
+		animation_info *Info = Model.AnimationsInfo;
 
-		AnimationInfoGet(Arena, &LibAnimations, Mesh->JointNames, Mesh->JointCount, Info, &AnimationInfoIndex);
-		Assert(AnimationInfoIndex == Mesh->AnimationInfoCount);
+		AnimationInfoGet(Arena, &LibAnimations, Model.Meshes[0].JointNames, Model.Meshes[0].JointCount, Info, &AnimationInfoIndex);
+		//Assert(AnimationInfoIndex == Model.AnimationsInfo.JointCount);
+#endif
+
+		// TODO(Justin): Do we still want to do an assert here for safe measure?
 	}
 
 	return(Model);

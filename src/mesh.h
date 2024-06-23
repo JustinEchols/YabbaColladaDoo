@@ -16,16 +16,20 @@ struct joint
 	mat4 Transform;
 };
 
+// NOTE(Justin): For now TimeCount and TransformCount are equal and the same for
+// each set of times/transforms. This does not have to be the case in general
+// but that increases the complexity of animation which is already difficult
+// enough. Therefore it assumed that these two values are always equal.
 struct animation_info
 {
-	string JointName;
-	s32 JointIndex;
+	u32 JointCount;
+	string *JointNames;
 
 	u32 TimeCount;
-	f32 *Times;
+	f32 **Times;
 
 	u32 TransformCount;
-	mat4 *Transforms;
+	mat4 **Transforms;
 };
 
 struct material_spec
@@ -71,7 +75,6 @@ struct mesh
 
 	u32 JointCount;
 	u32 JointInfoCount;
-	u32 AnimationInfoCount;
 
 	string *JointNames;
 	joint *Joints;
@@ -81,8 +84,6 @@ struct mesh
 	mat4 *InvBindTransforms;
 	mat4 *JointTransforms;
 	mat4 *ModelSpaceTransforms;
-
-	animation_info *AnimationsInfo;
 
 	material_spec MaterialSpec;
 };
@@ -96,8 +97,7 @@ struct model
 
 	// TODO(Justin): OpenGL info here.
 
-	//u32 AnimationInfoCount;
-	//animation_info *AnimationsInfo;
+	animation_info AnimationsInfo;
 };
 
 #define MESH_H
