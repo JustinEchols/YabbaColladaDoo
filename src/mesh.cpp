@@ -16,63 +16,6 @@ JointIndexGet(string *JointNames, u32 JointCount, string JointName)
 	return(Result);
 }
 
-#if 0
-internal void
-AnimationInfoGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount, animation_info *AnimationInfo, u32 *AnimationInfoIndex)
-{
-	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
-	{
-		xml_node *Node = Root->Children[ChildIndex];
-		Assert(Node);
-		if(StringsAreSame(Node->Tag, "float_array"))
-		{
-			if(SubStringExists(Node->Attributes[0].Value, "input"))
-			{
-				animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-				Info->TimeCount = U32FromAttributeValue(Node);
-				Info->Times = PushArray(Arena, Info->TimeCount, f32);
-				ParseF32Array(Info->Times, Info->TimeCount, Node->InnerText);
-			}
-			else if(SubStringExists(Node->Attributes[0].Value, "output"))
-			{
-				xml_node AccessorNode = {};
-				NodeGet(Node->Parent, &AccessorNode, "accessor");
-
-				xml_attribute AttrCount = NodeAttributeGet(Node, "count");
-				xml_attribute AttrStride = NodeAttributeGet(&AccessorNode, "stride");
-
-				u32 Count = U32FromASCII(AttrCount.Value.Data);
-				u32 Stride = U32FromASCII(AttrStride.Value.Data);
-
-				animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-
-				Info->TransformCount = Count / Stride;
-				Info->Transforms = PushArray(Arena, Info->TransformCount, mat4);
-
-				ParseF32Array((f32 *)Info->Transforms, Count, Node->InnerText);
-			}
-		}
-		else if(StringsAreSame(Node->Tag, "animation"))
-		{
-			// TODO(Justin): Figure out a way to get the joint name
-			animation_info *Info = AnimationInfo + *AnimationInfoIndex;
-
-			Info->JointName = NodeAttributeValueGet(Node, "name");
-			Info->JointIndex = JointIndexGet(JointNames, JointCount, Info->JointName);
-		}
-		else if(StringsAreSame(Node->Tag, "channel"))
-		{
-			(*AnimationInfoIndex)++;
-		}
-
-		if(*Node->Children)
-		{
-			AnimationInfoGet(Arena, Node, JointNames, JointCount, AnimationInfo, AnimationInfoIndex);
-		}
-	}
-}
-#else
-
 internal void
 AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationInfo)
 {
