@@ -68,7 +68,6 @@ AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationI
 		AnimationInfoIndex++;
 	}
 }
-#endif
 
 internal void
 JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount, joint *Joints, u32 *JointIndex)
