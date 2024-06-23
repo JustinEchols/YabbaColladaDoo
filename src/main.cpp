@@ -559,24 +559,25 @@ int main(int Argc, char **Argv)
 				f32 DtForFrame = 0.0f;
 				f32 Angle = 0.0f;
 
-				f32 AnimationCurrentTime = 0.0f;
-				u32 KeyFrameIndex = 0;
+				Model.AnimationsInfo.CurrentTime = 0.0f;
+				Model.AnimationsInfo.KeyFrameIndex = 0;
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
 					//
 					// NOTE(Justin): Skeletal transformations.
 					//
 
-					AnimationCurrentTime += DtForFrame;
-					if(AnimationCurrentTime > 0.03f)
+					animation_info *AnimInfo = &Model.AnimationsInfo;
+					AnimInfo->CurrentTime += DtForFrame;
+					if(AnimInfo->CurrentTime > 0.03f)
 					{
-						KeyFrameIndex += 1;
-						if(KeyFrameIndex >= 500)
+						AnimInfo->KeyFrameIndex += 1;
+						if(AnimInfo->KeyFrameIndex >= AnimInfo->TimeCount)
 						{
-							KeyFrameIndex = 0;
+							AnimInfo->KeyFrameIndex = 0;
 						}
 
-						AnimationCurrentTime = 0.0f;
+						AnimInfo->CurrentTime = 0.0f;
 					}
 
 					for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
@@ -590,10 +591,10 @@ int main(int Argc, char **Argv)
 							mat4 RootJointT = RootJoint.Transform;
 							mat4 RootInvBind = Mesh.InvBindTransforms[0];
 
-							u32 JointIndex = JointIndexGet(Model.AnimationsInfo.JointNames, Model.AnimationsInfo.JointCount, RootJoint.Name);
+							u32 JointIndex = JointIndexGet(AnimInfo->JointNames, AnimInfo->JointCount, RootJoint.Name);
 							if(JointIndex != -1)
 							{
-								RootJointT = Model.AnimationsInfo.Transforms[JointIndex][KeyFrameIndex];
+								RootJointT = AnimInfo->Transforms[JointIndex][AnimInfo->KeyFrameIndex];
 							}
 
 							Mesh.JointTransforms[0] = RootJointT;
@@ -603,10 +604,10 @@ int main(int Argc, char **Argv)
 								joint *Joint = Mesh.Joints + Index;
 								mat4 JointTransform = Joint->Transform;
 
-								JointIndex = JointIndexGet(Model.AnimationsInfo.JointNames, Model.AnimationsInfo.JointCount, Joint->Name);
+								JointIndex = JointIndexGet(AnimInfo->JointNames, AnimInfo->JointCount, Joint->Name);
 								if(JointIndex != -1)
 								{
-									JointTransform = Model.AnimationsInfo.Transforms[JointIndex][KeyFrameIndex];
+									JointTransform = AnimInfo->Transforms[JointIndex][AnimInfo->KeyFrameIndex];
 								}
 
 								mat4 ParentTransform = Mesh.JointTransforms[Joint->ParentIndex];
@@ -630,7 +631,6 @@ int main(int Argc, char **Argv)
 
 					Angle += DtForFrame;
 					UniformV3Set(ShaderProgram, "LightDir", V3(2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle)));
-					//UniformV3Set(ShaderProgram, "LightDir", V3(-1.0f, 0.0f, 1.0f));
 
 					glBindVertexArray(VA[0]);
 					UniformMatrixArraySet(ShaderProgram, "Transforms", Model.Meshes[0].ModelSpaceTransforms, Model.Meshes[0].JointCount);

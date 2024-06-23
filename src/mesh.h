@@ -20,10 +20,25 @@ struct joint
 // each set of times/transforms. This does not have to be the case in general
 // but that increases the complexity of animation which is already difficult
 // enough. Therefore it assumed that these two values are always equal.
+
+// NOTE(Justin): The animation data in 1-1 correspondence is
+//
+// JointNames
+// Times
+// Transforms
+
+// That is,
+//
+// JointNames[0] Is the name of the first joint
+// Times[0] is the array of times of the first joint in the animation
+// Transforms[0] is the array of joint transforms for the first joint in the animation
 struct animation_info
 {
 	u32 JointCount;
 	string *JointNames;
+
+	f32 CurrentTime;
+	u32 KeyFrameIndex;
 
 	u32 TimeCount;
 	f32 **Times;
