@@ -273,11 +273,13 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				InnerTextIndex = 0;
 				Index -= ((s32)strlen("<COLLADA") + 1);
 
+
+				u32 DelimeterCount = 2;
 				char TagDelimeters[] = "<>";
 				char InnerTagDelimeters[] = "=\"";
 
 				string Data = String((u8 *)(Content + Index));
-				string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, 2);
+				string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, DelimeterCount);
 
 				string_node *Token = List.First;
 				Token = Token->Next;
@@ -319,7 +321,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 							Temp.Data++;
 							Temp.Size--;
 
-							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, 2);
+							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
 
 							Token = Token->Next;
 							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
@@ -336,7 +338,7 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 							Temp.Data++;
 							Temp.Size--;
 
-							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, 2);
+							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
 
 							Token = Token->Next;
 							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
@@ -432,8 +434,8 @@ int main(int Argc, char **Argv)
 				glEnable(GL_CULL_FACE);
 				glCullFace(GL_BACK);
 
-				glEnable(GL_BLEND);
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				glEnable(GL_MULTISAMPLE);
+				glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
 
 				//
 				// NOTE(Justin): Opengl shader initialization
