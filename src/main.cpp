@@ -273,7 +273,6 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				InnerTextIndex = 0;
 				Index -= ((s32)strlen("<COLLADA") + 1);
 
-
 				u32 DelimeterCount = 2;
 				char TagDelimeters[] = "<>";
 				char InnerTagDelimeters[] = "=\"";
@@ -365,6 +364,22 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 	return(Result);
 }
 
+internal void
+ColladaPrint(xml_node *Node)
+{
+	for(s32 ChildIndex = 0; ChildIndex < Node->ChildrenCount; ++ChildIndex)
+	{
+		xml_node *N = Node->Children[ChildIndex];
+		printf("Tag:%s\nInnerText:%s\n\n", (char *)N->Tag.Data, (char *)N->InnerText.Data);
+
+		if(*N->Children)
+		{
+			ColladaPrint(N);
+		}
+	}
+}
+
+#if RENDER_TEST
 int main(int Argc, char **Argv)
 {
 	void *Memory = calloc(Megabyte(256), sizeof(u8));
@@ -613,3 +628,20 @@ int main(int Argc, char **Argv)
 
 	return(0);
 }
+#else
+int main(int Argc, char **Argv)
+{
+	void *Memory = calloc(Megabyte(256), sizeof(u8));
+
+	memory_arena Arena_;
+	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(256));
+	memory_arena *Arena = &Arena_;
+
+	loaded_dae LoadedDAE = {};
+	LoadedDAE = ColladaFileLoad(Arena, "..\\data\\IdleShiftWeight.dae");
+
+	ColladaPrint(LoadedDAE.Root);
+
+	return(0);
+}
+#endif
