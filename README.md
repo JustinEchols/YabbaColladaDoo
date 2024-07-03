@@ -22,9 +22,9 @@ None
 
 \> cd YabbaColladaDoo
 
-\YabbaColladaDoo> cd src
+\YabbaColladaDoo>cd src
 
-\YabbaColladaDoo\src> build.bat
+\YabbaColladaDoo\src>build.bat
 
 ## Example Usage
 The example program built from the source accepts two command line arguments.
