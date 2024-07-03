@@ -896,6 +896,8 @@ int main(int Argc, char **Argv)
 
 					printf("Done\n");
 
+					// NOTE(Justin): Remove comment and compile to look at the
+					// model in the debugger.
 					//model Model = ModelLoad(Arena, (char *)MeshFileName.Data);
 					//Model.AnimationsInfo = AnimationInfoLoad(Arena, (char *)AnimFileName.Data);
 				}
