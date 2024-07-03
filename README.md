@@ -31,8 +31,16 @@ None
 ## Example Usage
 The example program built from the source accepts two command line arguments.
 
-- 1) What you want to export (either -m for mesh, or -a for animation)
-- 2) Path to a collada file
+- What you want to export (either -m for mesh, or -a for animation)
+- Path to a collada file
+
+For example, to export the XBot mesh use (assuming you are in the same directory as the exe)
+
+main.exe -m ..\data\XBot.dae
+
+and to export the idle animation
+
+main.exe -a ..\data\XBot_IdleShiftWeight.dae
 
 
 
