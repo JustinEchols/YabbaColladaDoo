@@ -20,5 +20,11 @@ struct string_list
 	u64 Size;
 };
 
+struct string_array
+{
+	u32 Count;
+	string *Strings;
+};
+
 #define STRINGS_H
 #endif

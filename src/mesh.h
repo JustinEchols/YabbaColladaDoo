@@ -12,14 +12,13 @@ struct joint
 {
 	string Name;
 	s32 ParentIndex;
-	s32 Index;
 	mat4 Transform;
 };
 
 // NOTE(Justin): For now TimeCount and TransformCount are equal and the same for
 // each set of times/transforms. This does not have to be the case in general
 // but that increases the complexity of animation which is already difficult
-// enough. Therefore it assumed that these two values are always equal.
+// enough. Therefore it is assumed that these two values are always equal.
 
 // NOTE(Justin): The animation data in 1-1 correspondence is
 //
@@ -80,13 +79,11 @@ struct mesh
 	u32 NormalsCount;
 	u32 UVCount;
 	u32 IndicesCount;
-	u32 WeightCount;
 
 	f32 *Positions;
 	f32 *Normals;
 	f32 *UV;
 	u32 *Indices;
-	f32 *Weights;
 
 	u32 JointCount;
 	u32 JointInfoCount;
@@ -110,7 +107,10 @@ struct model
 	u32 MeshCount;
 	mesh *Meshes;
 
-	// TODO(Justin): OpenGL info here.
+	// TODO(Justin): Should this be stored at the mesh level?
+	u32 VA[2];
+	u32 PosVB[2], NormVB[2], JointInfoVB[2];
+	u32 IBO[2];
 
 	animation_info AnimationsInfo;
 };

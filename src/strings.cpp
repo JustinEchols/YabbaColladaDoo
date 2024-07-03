@@ -1,7 +1,77 @@
 
-b32 IsNewLine(char *S)
+inline b32
+IsNumber(u8 C)
+{
+	b32 Result = ((C >= '0') && (C < '9'));
+	return(Result);
+}
+
+inline b32 
+IsNewLine(char *S)
 {
 	b32 Result = ((*S == '\n') || (*S == '\r'));
+	return(Result);
+}
+
+inline s32
+S32FromASCII(u8 *S)
+{
+	s32 Result = atoi((char *)S);
+	return(Result);
+}
+
+inline u32
+U32FromASCII(u8 *S)
+{
+	u32 Result = (u32)atoi((char *)S);
+	return(Result);
+}
+
+inline u32
+U32FromASCII(string S)
+{
+	u32 Result = U32FromASCII(S.Data);
+	return(Result);
+}
+
+inline f32
+F32FromASCII(u8 *S)
+{
+	f32 Result = (f32)atof((char *)S);
+	return(Result);
+}
+
+inline f32
+F32FromASCII(string S)
+{
+	f32 Result = F32FromASCII(S.Data);
+	return(Result);
+}
+
+inline char 
+U32ToASCII(u32 U32)
+{
+	char Result = (char)('0' + U32);
+	return(Result);
+}
+
+inline u32
+DigitCount(u32 U32)
+{
+	u32 Result = 0;
+	if(U32 > 9)
+	{
+		while(U32 != 0)
+		{
+			U32 /= 10;
+			Result++;
+		}
+	}
+	else
+	{
+		Result++;
+	}
+
 	return(Result);
 }
 
@@ -21,6 +91,20 @@ String(u8 *Cstr)
 	string Result = StringFromRange(Cstr, C);
 
 	return(Result);
+}
+
+inline u32
+StringLength(char *Cstr)
+{
+	u32 Result = 0;
+	for(char *C = Cstr; *C++;) {Result++;}
+	return(Result);
+}
+
+internal void
+StringPrint(string S)
+{
+	printf("%s\n", (char *)S.Data);
 }
 
 internal b32
@@ -115,6 +199,28 @@ StringSearchFor(string S, char C)
 
 }
 
+internal string
+StringCat(memory_arena *Arena, string S1, string S2)
+{
+	string Result = {};
+	Result.Size = S1.Size + S2.Size;
+	Result.Data = PushArray(Arena, Result.Size + 1, u8);
+
+	u32 i;
+	for(i = 0; i < S1.Size; ++i)
+	{
+		Result.Data[i] = S1.Data[i];
+	}
+
+	for(u32 j = 0; j < S2.Size; ++j)
+	{
+		Result.Data[i++] = S2.Data[j];
+	}
+	Result.Data[Result.Size] = 0;
+
+	return(Result);
+}
+
 internal void
 StringListPushExplicit(string_list *List, string String, string_node *Node)
 {
@@ -171,33 +277,123 @@ StringSplit(memory_arena *Arena, string String, u8 *Splits, u32 Count)
 	return(Result);
 }
 
-inline s32
-S32FromASCII(u8 *S)
+
+internal string
+StringAlloc(memory_arena *Arena, u32 Count)
 {
-	s32 Result = atoi((char *)S);
+	string Result = {};
+	
+	Result.Size = Count;
+	Result.Data = PushArray(Arena, Result.Size + 1, u8);
+	Result.Data[Result.Size] = 0;
+
 	return(Result);
 }
 
-inline u32
-U32FromASCII(u8 *S)
+internal string
+StringAllocAndCopy(memory_arena *Arena, string Str)
 {
-	u32 Result = (u32)atoi((char *)S);
+	Assert(Str.Data);
+
+	string Result = {};
+	
+	Result.Size = Str.Size;
+	Result.Data = PushArray(Arena, Result.Size + 1, u8);
+
+	ArrayCopy(Result.Size, Str.Data, Result.Data);
+	Result.Data[Result.Size] = '\0';
+
 	return(Result);
 }
 
-inline f32
-F32FromASCII(u8 *S)
+internal string
+StringAllocAndCopy(memory_arena *Arena, char *Cstr)
 {
-	f32 Result = (f32)atof((char *)S);
+	string Result = StringAllocAndCopy(Arena, String((u8 *)Cstr));
 	return(Result);
 }
 
-inline f32
-F32FromASCII(string S)
+internal string_array
+StringArrayAllocate(memory_arena *Arena, u32 Count)
 {
-	f32 Result = F32FromASCII(S.Data);
+	string_array Result = {};
+
+	Result.Count = Count;
+	Result.Strings = PushArray(Arena, Result.Count, string);
+	
 	return(Result);
 }
+
+internal string
+DigitToString(memory_arena *Arena, u32 U32)
+{
+	string Result;
+	Result.Size = DigitCount(U32);
+	Result.Data = PushArray(Arena, Result.Size + 1, u8);
+	Result.Data[Result.Size + 1] = 0;
+
+	u32 Last = (u32)Result.Size - 1;
+	for(u32 Index = 0; Index < Result.Size; ++Index)
+	{
+		u32 Digit = U32 % 10;
+		U32 /= 10;
+		Result.Data[Last - Index] = U32ToASCII(Digit);
+	}
+
+	return(Result);
+}
+
+internal string_array
+StringSplitIntoArray(memory_arena *Arena, string Str, u8 *Delimeters, u32 DelimCount)
+{
+	string_array Result = {};
+
+	string_list List = StringSplit(Arena, Str, Delimeters, DelimCount);
+
+	Result.Count = (u32)List.Count;
+	Result.Strings = PushArray(Arena, Result.Count, string);
+
+	string_node *StrNode = List.First;
+	for(u32 Index = 0; Index < List.Count; ++Index)
+	{
+		string S = StringAllocAndCopy(Arena, StrNode->String);
+		S.Data[S.Size] = 0;
+		Result.Strings[Index] = S;
+		StrNode = StrNode->Next;
+	}
+
+	return(Result);
+}
+
+internal string
+F32ToString(memory_arena *Arena, f32 F32)
+{
+	string Result;
+
+	char Buff[256];
+	sprintf(Buff, "%f", F32);
+
+	Result = StringAllocAndCopy(Arena, Buff);
+
+	return(Result);
+}
+
+internal string_list
+F32ArrayToStringList(memory_arena *Arena, f32 *A, u32 Count)
+{
+	string_list Result = {};
+
+	char Buff[256];
+	for(u32 i = 0; i < Count; ++i)
+	{
+		sprintf(Buff, "%f", A[i]);
+		string S = StringAllocAndCopy(Arena, Buff);
+		StringListPush(Arena, &Result, S);
+	}
+
+	return(Result);
+}
+
 
 internal void
 ParseU32Array(u32 *Dest, u32 DestCount, string Str)
@@ -262,29 +458,6 @@ ParseF32Array(memory_arena *Arena, f32 *Dest, u32 DestCount, string Str)
 			}
 		}
 	}
-}
-
-internal string
-StringAllocAndCopy(memory_arena *Arena, string Str)
-{
-	Assert(Str.Data);
-
-	string Result = {};
-	
-	Result.Size = Str.Size;
-	Result.Data = PushArray(Arena, Result.Size + 1, u8);
-
-	ArrayCopy(Result.Size, Str.Data, Result.Data);
-	Result.Data[Result.Size] = '\0';
-
-	return(Result);
-}
-
-internal string
-StringAllocAndCopy(memory_arena *Arena, char *Cstr)
-{
-	string Result = StringAllocAndCopy(Arena, String((u8 *)Cstr));
-	return(Result);
 }
 
 internal void
