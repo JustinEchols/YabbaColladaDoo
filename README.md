@@ -22,8 +22,6 @@ None
 
 \> cd YabbaColladaDoo
 
-\YabbaColladaDoo> misc\shell.bat
-
 \YabbaColladaDoo> cd src
 
 \YabbaColladaDoo\src> build.bat
