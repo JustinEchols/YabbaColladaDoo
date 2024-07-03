@@ -31,7 +31,7 @@ None
 ## Example Usage
 The example program built from the source accepts two command line arguments.
 
-- 1) What you want to export (either -m for model, or -a for animation)
+- 1) What you want to export (either -m for mesh, or -a for animation)
 - 2) Path to a collada file
 
 
