@@ -18,9 +18,9 @@ The number of attributes of a node is set to a compile time constant COLLADA_ATT
 None
 
 ## Setup
-\> git clone https://github.com/JustinEchols/YabbaColladaDoo.git
+\>git clone https://github.com/JustinEchols/YabbaColladaDoo.git
 
-\> cd YabbaColladaDoo
+\>cd YabbaColladaDoo
 
 \YabbaColladaDoo>cd src
 
