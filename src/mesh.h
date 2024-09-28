@@ -1,5 +1,6 @@
 #if !defined(MESH_H)
 
+#pragma pack(push, 1)
 struct joint_info
 {
 	u32 Count;
@@ -7,7 +8,6 @@ struct joint_info
 	f32 Weights[3];
 };
 
-// TODO(Justin): Do we really need Index?
 struct joint
 {
 	string Name;
@@ -15,35 +15,43 @@ struct joint
 	mat4 Transform;
 };
 
-// NOTE(Justin): For now TimeCount and TransformCount are equal and the same for
-// each set of times/transforms. This does not have to be the case in general
-// but that increases the complexity of animation which is already difficult
-// enough. Therefore it is assumed that these two values are always equal.
+struct vertex
+{
+	v3 P;
+	v3 N;
+	v2 UV;
 
-// NOTE(Justin): The animation data in 1-1 correspondence is
-//
-// JointNames
-// Times
-// Transforms
+	joint_info JointInfo;
+};
+#pragma pack(pop)
 
-// That is,
-//
-// JointNames[0] Is the name of the first joint
-// Times[0] is the array of times of the first joint in the animation
-// Transforms[0] is the array of joint transforms for the first joint in the animation
+struct key_frame
+{
+	v3 *Positions;
+	quaternion *Quaternions;
+	v3 *Scales;
+
+	mat4 *Transforms;
+};
+
 struct animation_info
 {
 	u32 JointCount;
-	string *JointNames;
-
-	f32 CurrentTime;
-	u32 KeyFrameIndex;
-
 	u32 TimeCount;
-	f32 **Times;
+	u32 KeyFrameCount;
+	u32 KeyFrameIndex;
+	f32 CurrentTime;
 
-	u32 TransformCount;
-	mat4 **Transforms;
+	string *JointNames;
+	f32 *Times;
+	key_frame *KeyFrames;
+};
+
+struct animation
+{
+	u32 Count;
+	u32 Index;
+	animation_info *Info;
 };
 
 struct material_spec
@@ -55,65 +63,49 @@ struct material_spec
 	f32 Shininess;
 };
 
-// NOTE(Justin): Vertex data in 1-1 correspondence is
-//
-// P
-// N
-// UV
-// JointsInfo
-//
-// Skeletal data in 1-1 correspondence is
-//
-// JointNames
-// InvBindTransforms
-// JointTransforms
-// ModelSpaceTransforms
 
-// TODO(Justin): Think about removing Weights. They are already stored in
-// joint_info for each vertex.
+
 struct mesh
 {
 	string Name;
 
-	u32 PositionsCount;
-	u32 NormalsCount;
-	u32 UVCount;
-	u32 IndicesCount;
+	u32 IndicesCount; //load
+	u32 VertexCount; //load
+	u32 JointCount; //load
 
-	f32 *Positions;
-	f32 *Normals;
-	f32 *UV;
-	u32 *Indices;
+	u32 *Indices; //do not have ot load
+	vertex *Vertices; //load
 
-	u32 JointCount;
-	u32 JointInfoCount;
+	string *JointNames; //load
+	joint *Joints; //load
 
-	string *JointNames;
-	joint *Joints;
-	joint_info *JointsInfo;
-
-	mat4 BindTransform;
-	mat4 *InvBindTransforms;
-	mat4 *JointTransforms;
-	mat4 *ModelSpaceTransforms;
+	mat4 BindTransform; //load
+	mat4 *InvBindTransforms;//load
+	mat4 *JointTransforms; //runtime
+	mat4 *ModelSpaceTransforms; //runtime
 
 	material_spec MaterialSpec;
+
+	u32 TextureHandle;//runtime
 };
 
 struct model
 {
 	basis Basis;
 
+	b32 HasSkeleton;
+
 	u32 MeshCount;
 	mesh *Meshes;
 
 	// TODO(Justin): Should this be stored at the mesh level?
 	u32 VA[2];
-	u32 PosVB[2], NormVB[2], JointInfoVB[2];
+	u32 VB[2];
 	u32 IBO[2];
 
-	animation_info AnimationsInfo;
+	animation Animations;
 };
+
 
 #define MESH_H
 #endif

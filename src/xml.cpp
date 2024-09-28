@@ -240,3 +240,152 @@ U32FromAttributeValue(xml_node *Node)
 
 	return(Result);
 }
+
+internal void
+ColladaPrint(xml_node *Node)
+{
+	for(s32 ChildIndex = 0; ChildIndex < Node->ChildrenCount; ++ChildIndex)
+	{
+		xml_node *N = Node->Children[ChildIndex];
+		printf("Tag:%s\nInnerText:%s\n\n", (char *)N->Tag.Data, (char *)N->InnerText.Data);
+
+		if(*N->Children)
+		{
+			ColladaPrint(N);
+		}
+	}
+}
+
+internal loaded_dae
+ColladaFileLoad(memory_arena *Arena, char *FileName)
+{
+	loaded_dae Result = {};
+
+	FILE *FileHandle = fopen(FileName, "r");
+	if(FileHandle)
+	{
+		s32 Size = FileSizeGet(FileHandle);
+		if(Size != -1)
+		{
+			u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
+			FileReadEntireAndNullTerminate(Content, Size, FileHandle);
+			if(FileClose(FileHandle))
+			{
+				Result.FullPath = StringAllocAndCopy(Arena, FileName);
+
+				//
+				// NOTE(Justin): Skip to the <COLLADA> node.
+				//
+
+				char Buffer[512];
+				s32 InnerTextIndex = 0;
+				s32 Index = 0;
+				while(!SubStringExists(Buffer, "COLLADA"))
+				{	
+					Buffer[InnerTextIndex++] = Content[Index++];
+					Buffer[InnerTextIndex] = '\0';
+				}
+
+				InnerTextIndex = 0;
+				Index -= ((s32)strlen("<COLLADA") + 1);
+
+				u32 DelimeterCount = 2;
+				char TagDelimeters[] = "<>";
+				char InnerTagDelimeters[] = "=\"";
+
+				string Data = String((u8 *)(Content + Index));
+				string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, DelimeterCount);
+
+				string_node *Token = List.First;
+				Token = Token->Next;
+
+				Result.Root = PushXMLNode(Arena, 0);
+				xml_node *CurrentNode = Result.Root;
+
+				CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+				Token = Token->Next;
+				CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+
+				while(Token->Next)
+				{
+					Token = Token->Next;
+					if(Token->String.Data[0] == '/')
+					{
+						if(CurrentNode->Parent)
+						{
+							CurrentNode = CurrentNode->Parent;
+							Token = Token->Next;
+						}
+						else
+						{
+							break;
+						}
+					}
+					else
+					{
+						CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+
+						if(NodeHasKeysValues(Token->String) && StringEndsWith(Token->String, '/'))
+						{
+							string AtSpace = StringSearchFor(Token->String, ' ');
+							u64 CopySize = (Token->String.Size - AtSpace.Size);
+							string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
+							CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
+
+							string Temp = AtSpace;
+							Temp.Data++;
+							Temp.Size--;
+
+							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
+
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+							CurrentNode = CurrentNode->Parent;
+						}
+						else if(NodeHasKeysValues(Token->String))
+						{
+							string AtSpace = StringSearchFor(Token->String, ' ');
+							u64 CopySize = (Token->String.Size - AtSpace.Size);
+							string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
+							CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
+
+							string Temp = AtSpace;
+							Temp.Data++;
+							Temp.Size--;
+
+							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
+
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+						}
+						else if(StringEndsWith(Token->String, '/'))
+						{
+							CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+							CurrentNode = CurrentNode->Parent;
+						}
+						else
+						{
+							CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+							Token = Token->Next;
+							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+			printf("Error file %s has size %d", FileName, Size);
+		}
+	}
+	else
+	{
+		printf("Error opening file %s", FileName);
+		perror("");
+	}
+
+	return(Result);
+}
+

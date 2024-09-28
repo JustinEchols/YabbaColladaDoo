@@ -13,6 +13,20 @@ IsNewLine(char *S)
 	return(Result);
 }
 
+inline b32 
+IsNewLine(u8 *S)
+{
+	b32 Result = ((*S == '\n') || (*S == '\r'));
+	return(Result);
+}
+
+inline b32 
+IsSpace(u8 *S)
+{
+	b32 Result = ((*S == ' '));
+	return(Result);
+}
+
 inline s32
 S32FromASCII(u8 *S)
 {
@@ -135,7 +149,7 @@ StringsAreSame(string S1, string S2)
 	return(Result);
 }
 
-internal b32
+inline b32
 StringsAreSame(char *Str1, char *Str2)
 {
 	string S1 = String((u8 *)Str1);
@@ -146,13 +160,42 @@ StringsAreSame(char *Str1, char *Str2)
 	return(Result);
 }
 
-internal b32
+inline b32
+StringsAreSame(u8 *Str1, char *Str2)
+{
+	string S1 = String(Str1);
+	string S2 = String((u8 *)Str2);
+
+	b32 Result = StringsAreSame(S1, S2);
+
+	return(Result);
+}
+
+inline b32
+StringsAreSame(u8 *Str1, u8 *Str2)
+{
+	string S1 = String(Str1);
+	string S2 = String(Str2);
+
+	b32 Result = StringsAreSame(S1, S2);
+
+	return(Result);
+}
+
+inline b32
 StringsAreSame(string S1, char *Str2)
 {
 	string S2 = String((u8 *)Str2);
 
 	b32 Result = StringsAreSame(S1, S2);
 
+	return(Result);
+}
+
+inline b32
+StringsAreSame(char *Str1, u8 *Str2)
+{
+	b32 Result = StringsAreSame(Str2, Str1);
 	return(Result);
 }
 
@@ -313,6 +356,13 @@ StringAllocAndCopy(memory_arena *Arena, char *Cstr)
 	return(Result);
 }
 
+internal string
+StringAllocAndCopy(memory_arena *Arena, u8 *Str)
+{
+	string Result = StringAllocAndCopy(Arena, String(Str));
+	return(Result);
+}
+
 internal string_array
 StringArrayAllocate(memory_arena *Arena, u32 Count)
 {
@@ -389,6 +439,25 @@ F32ArrayToStringList(memory_arena *Arena, f32 *A, u32 Count)
 		sprintf(Buff, "%f", A[i]);
 		string S = StringAllocAndCopy(Arena, Buff);
 		StringListPush(Arena, &Result, S);
+	}
+
+	return(Result);
+}
+
+internal string_array
+F32ArrayToStringArray(memory_arena *Arena, f32 *A, u32 Count)
+{
+	string_array Result = {};
+
+	Result.Count = Count;
+	Result.Strings = PushArray(Arena, Result.Count, string);
+
+	char Buff[256];
+	for(u32 i = 0; i < Count; ++i)
+	{
+		sprintf(Buff, "%f", A[i]);
+		string S = StringAllocAndCopy(Arena, Buff);
+		Result.Strings[i] = S;
 	}
 
 	return(Result);
@@ -483,4 +552,36 @@ ParseStringArray(memory_arena *Arena, string *Dest, u32 DestCount, string Str)
 			}
 		}
 	}
+}
+
+inline void
+EatSpaces(u8 **Buff)
+{
+	while(**Buff == ' ')
+	{
+		(*Buff)++;
+	}
+}
+
+inline void
+BufferNextWord(u8 **C, u8 *Buff)
+{
+	u32 Index = 0;
+	while(!IsNewLine(*C) && !IsSpace(*C))
+	{
+		Buff[Index++] = **C;
+		(*C)++;
+
+	}
+	Buff[Index] = 0;
+}
+
+inline void
+AdvanceToNewLine(u8 **C)
+{
+	while(!IsNewLine(*C))
+	{
+		(*C)++;
+	}
+	(*C)++;
 }
