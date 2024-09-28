@@ -25,35 +25,6 @@ struct vertex
 };
 #pragma pack(pop)
 
-struct key_frame
-{
-	v3 *Positions;
-	quaternion *Quaternions;
-	v3 *Scales;
-
-	mat4 *Transforms;
-};
-
-struct animation_info
-{
-	u32 JointCount;
-	u32 TimeCount;
-	u32 KeyFrameCount;
-	u32 KeyFrameIndex;
-	f32 CurrentTime;
-
-	string *JointNames;
-	f32 *Times;
-	key_frame *KeyFrames;
-};
-
-struct animation
-{
-	u32 Count;
-	u32 Index;
-	animation_info *Info;
-};
-
 struct material_spec
 {
 	v4 Ambient;

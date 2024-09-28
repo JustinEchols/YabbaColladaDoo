@@ -16,174 +16,6 @@ TextureLoad(char *FileName)
 	return(Texture);
 }
 
-enum animation_header
-{
-	AnimationHeader_Invalid,
-	AnimationHeader_Joints,
-	AnimationHeader_Times,
-	AnimationHeader_KeyFrame,
-};
-
-inline animation_header
-AnimationHeaderGet(u8 *Buff)
-{
-	animation_header Result = AnimationHeader_Invalid;
-	if(StringsAreSame(Buff, "JOINTS:"))
-	{
-		Result = AnimationHeader_Joints;
-	}
-	if(StringsAreSame(Buff, "TIMES:"))
-	{
-		Result = AnimationHeader_Times;
-	}
-	if(StringsAreSame(Buff, "KEY_FRAME:"))
-	{
-		Result = AnimationHeader_KeyFrame;
-	}
-
-	return(Result);
-}
-
-internal animation_info
-AnimationInfoLoad(memory_arena *Arena, char *FileName)
-{
-	animation_info Info = {};
-	FILE *File = fopen(FileName, "r");
-	if(File)
-	{
-		s32 Size = FileSizeGet(File);
-		if(Size != -1)
-		{
-			u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
-			FileReadEntireAndNullTerminate(Content, Size, File);
-			if(FileClose(File) && Content)
-			{
-				string Data = String(Content);
-				u8 Delimeters[] = "\r\n";
-				string_list Lines = StringSplit(Arena, Data, Delimeters, ArrayCount(Delimeters));
-
-				u8 Buff[512];
-				for(string_node *Line = Lines.First; Line && Line->Next; Line = Line->Next)
-				{
-					if(Info.KeyFrameCount != 0)
-					{
-						// TODO(Justin): Figure out why we continue to have data
-						// to process!!?!
-						break;
-					}
-				
-					u8 *C = Line->String.Data;
-					BufferNextWord(&C, Buff);
-					animation_header Header = AnimationHeaderGet(Buff);
-					switch(Header)
-					{
-						case AnimationHeader_Joints:
-						{
-							EatSpaces(&C);
-							BufferNextWord(&C, Buff);
-							Info.JointCount = U32FromASCII(Buff);
-							Info.JointNames = PushArray(Arena, Info.JointCount, string);
-
-							for(u32 NameIndex = 0; NameIndex < Info.JointCount; ++NameIndex)
-							{
-								Line = Line->Next;
-								C = Line->String.Data;
-								BufferNextWord(&C, Buff);
-								Info.JointNames[NameIndex] = StringAllocAndCopy(Arena, Buff);
-							}
-
-						} break;
-
-						case AnimationHeader_Times:
-						{
-							EatSpaces(&C);
-							BufferNextWord(&C, Buff);
-							Info.TimeCount = U32FromASCII(Buff);
-							Info.Times = PushArray(Arena, Info.TimeCount, f32);
-
-							Line = Line->Next;
-							C = Line->String.Data;
-							for(u32 TimeIndex = 0; TimeIndex < Info.TimeCount; ++TimeIndex)
-							{
-								BufferNextWord(&C, Buff);
-								Info.Times[TimeIndex] = F32FromASCII(Buff);
-								EatSpaces(&C);
-							}
-						} break;
-
-						case AnimationHeader_KeyFrame:
-						{
-							Info.KeyFrameCount = Info.TimeCount;
-							Info.KeyFrames = PushArray(Arena, Info.KeyFrameCount, key_frame);
-							for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
-							{
-								////Info.KeyFrames[KeyFrameIndex].Transforms = PushArray(Arena, Info.JointCount, mat4);
-								Info.KeyFrames[KeyFrameIndex].Positions = PushArray(Arena, Info.JointCount, v3);
-								Info.KeyFrames[KeyFrameIndex].Quaternions = PushArray(Arena, Info.JointCount, quaternion);
-								Info.KeyFrames[KeyFrameIndex].Scales = PushArray(Arena, Info.JointCount, v3);
-							}
-
-							for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
-							{
-								key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
-								for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
-								{
-									v3 *P = KeyFrame->Positions + JointIndex;
-									quaternion *Q = KeyFrame->Quaternions + JointIndex;
-									v3 *Scale = KeyFrame->Scales + JointIndex;
-
-									Line = Line->Next;
-									C = Line->String.Data;
-									f32 *F32 = (f32 *)P;
-									for(u32 FloatIndex = 0; FloatIndex < 3; ++FloatIndex)
-									{
-										BufferNextWord(&C, Buff);
-										F32[FloatIndex] = F32FromASCII(Buff);
-										EatSpaces(&C);
-									}
-
-									Line = Line->Next;
-									C = Line->String.Data;
-									F32 = (f32 *)Q;
-									for(u32 FloatIndex = 0; FloatIndex < 4; ++FloatIndex)
-									{
-										BufferNextWord(&C, Buff);
-										F32[FloatIndex] = F32FromASCII(Buff);
-										EatSpaces(&C);
-									}
-
-									Line = Line->Next;
-									C = Line->String.Data;
-									F32 = (f32 *)Scale;
-									for(u32 FloatIndex = 0; FloatIndex < 3; ++FloatIndex)
-									{
-										BufferNextWord(&C, Buff);
-										F32[FloatIndex] = F32FromASCII(Buff);
-										EatSpaces(&C);
-									}
-								}
-
-								Line = Line->Next;
-							}
-						} break;
-					}
-				}
-			}
-			else
-			{
-				printf("Error file size is %d\n", Size);
-			}
-		}
-	}
-	else
-	{
-		printf("Error could not read %s\n", FileName);
-		perror("");
-	}
-
-	return(Info);
-}
-
 internal void 
 ConvertMeshFormat(memory_arena *Arena, char *OutputFileName, char *FileName)
 {
@@ -362,4 +194,156 @@ ModelLoad(memory_arena *Arena, char *FileName)
 	}
 
 	return(Model);
+}
+
+internal void
+ConvertAnimationFormat(memory_arena *Arena, char *OutputFileName, char *DaeFileName)
+{
+	FILE *Out = fopen(OutputFileName, "wb");
+	if(Out)
+	{
+		animation_info Info = AnimationInitFromCollada(Arena, DaeFileName);
+
+		asset_animation_header Header = {};
+
+		Header.MagicNumber = ANIMATION_FILE_MAGIC_NUMBER;
+		Header.Version = ANIMATION_FILE_VERSION;
+		Header.JointCount = Info.JointCount;
+		Header.KeyFrameCount = Info.KeyFrameCount;
+		Header.TimeCount = Info.TimeCount;
+		Header.KeyFrameIndex = Info.KeyFrameIndex;
+		Header.CurrentTime = Info.CurrentTime;
+		Header.Duration = Info.Duration;
+		Header.FrameRate = Info.FrameRate;
+
+		u32 TimesTotalSize = Info.TimeCount * sizeof(f32);
+		u32 NamesTotalSize = Info.JointCount * sizeof(asset_joint_name);
+
+		Header.OffsetToTimes = sizeof(Header);
+		Header.OffsetToNames = Header.OffsetToTimes + TimesTotalSize;
+		Header.OffsetToKeyFrames = Header.OffsetToNames + NamesTotalSize;
+
+		fwrite(&Header, sizeof(Header), 1, Out);
+
+		for(u32 TimeIndex = 0; TimeIndex < Info.TimeCount; ++TimeIndex)
+		{
+			fwrite(&Info.Times[TimeIndex], sizeof(f32), 1, Out);
+		}
+
+		for(u32 NameIndex = 0; NameIndex < Info.JointCount; ++NameIndex)
+		{
+			string *Source = Info.JointNames + NameIndex;
+			asset_joint_name Dest = {};
+
+			MemoryCopy(Source->Size, Source->Data, Dest.Name);
+			fwrite(&Dest.Name, sizeof(u8), ArrayCount(Dest.Name), Out);
+		}
+
+		asset_manager Manager = {};
+		Manager.AssetCount = Header.KeyFrameCount;
+
+		u32 OffsetToAssets = sizeof(Header) + TimesTotalSize + NamesTotalSize;
+		u32 AssetsTotalSize = Manager.AssetCount * sizeof(asset_animation_info);
+		u32 OffsetToData = OffsetToAssets + AssetsTotalSize;
+
+		fseek(Out, OffsetToData, SEEK_CUR);
+		for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
+		{
+			key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex; 
+			asset *Asset = Manager.Assets + KeyFrameIndex;
+			asset_animation_info *AnimationInfo = &Asset->AnimationInfo;
+
+			AnimationInfo->OffsetToPositions = ftell(Out);
+			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+			{
+				v3 *P = KeyFrame->Positions + JointIndex;
+				fwrite(&P->x, sizeof(f32), 1, Out);
+				fwrite(&P->y, sizeof(f32), 1, Out);
+				fwrite(&P->z, sizeof(f32), 1, Out);
+			}
+
+			AnimationInfo->OffsetToQuaternions = ftell(Out);
+			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+			{
+				quaternion *Q = KeyFrame->Quaternions + JointIndex;
+				fwrite(&Q->x, sizeof(f32), 1, Out);
+				fwrite(&Q->y, sizeof(f32), 1, Out);
+				fwrite(&Q->z, sizeof(f32), 1, Out);
+				fwrite(&Q->w, sizeof(f32), 1, Out);
+			}
+
+			AnimationInfo->OffsetToScales = ftell(Out);
+			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+			{
+				v3 *S = KeyFrame->Scales + JointIndex;
+				fwrite(&S->x, sizeof(f32), 1, Out);
+				fwrite(&S->y, sizeof(f32), 1, Out);
+				fwrite(&S->z, sizeof(f32), 1, Out);
+			}
+		}
+
+		fseek(Out, OffsetToAssets, SEEK_SET);
+		for(u32 AssetIndex = 0; AssetIndex < Manager.AssetCount; ++AssetIndex)
+		{
+			asset *Asset = Manager.Assets + AssetIndex;
+			asset_animation_info *AInfo = &Asset->AnimationInfo;
+			fwrite(&AInfo->OffsetToPositions, sizeof(u64), 1, Out);
+			fwrite(&AInfo->OffsetToQuaternions, sizeof(u64), 1, Out);
+			fwrite(&AInfo->OffsetToScales, sizeof(u64), 1, Out);
+		}
+
+		fclose(Out);
+	}
+}
+
+internal animation_info 
+AnimationLoad(memory_arena *Arena, char *FileName)
+{
+	animation_info Info = {};
+
+	FILE *File = fopen(FileName, "rb");
+	s32 Size = FileSizeGet(File);
+	if(Size != 0)
+	{
+		u8 *Content = (u8 *)PushSize_(Arena, Size);
+		FileReadEntire(Content, Size, File);
+
+		asset_animation_header *Header = (asset_animation_header *)Content;
+		Assert(Header->MagicNumber == ANIMATION_FILE_MAGIC_NUMBER);
+		Assert(Header->Version == ANIMATION_FILE_VERSION);
+		Assert(Header->JointCount != 0);
+
+		Info.JointCount = Header->JointCount;
+		Info.KeyFrameCount = Header->KeyFrameCount;
+		Info.TimeCount = Header->TimeCount;
+		Info.KeyFrameIndex = Header->KeyFrameIndex;
+		Info.CurrentTime = Header->CurrentTime;
+		Info.Duration = Header->Duration;
+		Info.FrameRate = Header->FrameRate;
+
+		Info.Times = (f32 *)(Content + Header->OffsetToTimes);
+		
+		// TODO(Justin): Should not have to copy the data!!
+		//Info.JointNames = (string *)(Content + Header->OffsetToNames);
+		Info.JointNames = PushArray(Arena, Info.JointCount, string);
+		asset_joint_name *JointNameSource = (asset_joint_name *)(Content + Header->OffsetToNames);
+		for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+		{
+			Info.JointNames[JointIndex] = String(JointNameSource->Name);
+			JointNameSource++;
+		}
+
+		Info.KeyFrames = PushArray(Arena, Info.TimeCount, key_frame);
+		asset_animation_info *AnimationSource = (asset_animation_info *)(Content + Header->OffsetToKeyFrames);
+		for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
+		{
+			key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
+			KeyFrame->Positions = (v3 *)(Content + AnimationSource->OffsetToPositions);
+			KeyFrame->Quaternions = (quaternion *)(Content + AnimationSource->OffsetToQuaternions);
+			KeyFrame->Scales = (v3 *)(Content + AnimationSource->OffsetToScales);
+			AnimationSource++;
+		}
+	}
+
+	return(Info);
 }

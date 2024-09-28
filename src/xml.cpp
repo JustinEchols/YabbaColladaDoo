@@ -379,6 +379,8 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		{
 			printf("Error file %s has size %d", FileName, Size);
 		}
+
+		fclose(FileHandle);
 	}
 	else
 	{

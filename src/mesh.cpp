@@ -244,6 +244,7 @@ FileWriteJoints(FILE *OutputFile, memory_arena *Arena, xml_node *Root, string *J
 }
 
 
+#if 0
 internal void
 ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFileName)
 {
@@ -270,11 +271,13 @@ ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFile
 			animation_info Info = {};
 			Info.JointCount = JointCount;
 			Info.JointNames = PushArray(Arena, Info.JointCount, string);
-			Info.TimeCount = U32FromASCII(StrTimeCount);
-			Info.Times = PushArray(Arena, Info.TimeCount, f32);
+
+			u32 TimeCount = U32FromASCII(StrTimeCount);
+			f32 *Times = PushArray(Arena, TimeCount, f32);
 
 			u32 TransformCount = Info.JointCount;
 			mat4 **Transforms = PushArray(Arena, TransformCount, mat4 *);
+			//Info.KeyFrameCount = Info.TimeCount;
 			Info.KeyFrameCount = Info.TimeCount;
 			Info.KeyFrames = PushArray(Arena, Info.KeyFrameCount, key_frame);
 
@@ -438,6 +441,158 @@ ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFile
 		perror("Could not open file");
 	}
 }
+#else
+
+internal animation_info 
+AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
+{
+	animation_info Info = {};
+
+	loaded_dae DaeFile = ColladaFileLoad(Arena, DaeFileName);
+
+	xml_node *Root = DaeFile.Root;
+	xml_node LibAnimations = {};
+	NodeGet(Root, &LibAnimations, "library_animations");
+
+	if(LibAnimations.ChildrenCount != 0)
+	{
+		u8 Delimeters[] = " \n\r";
+
+		if(LibAnimations.ChildrenCount == 1)
+		{
+			LibAnimations = *LibAnimations.Children[0];
+		}
+
+		u32 JointCount = LibAnimations.ChildrenCount;
+
+		xml_node FloatArray = {};
+		NodeGet(&LibAnimations, &FloatArray, "float_array");
+		string StrTimeCount = NodeAttributeValueGet(&FloatArray, "count");
+
+		//animation_info Info = {};
+
+		u32 TimeCount = U32FromASCII(StrTimeCount);
+		Info.TimeCount = TimeCount;//U32FromASCII(StrTimeCount);
+								   //f32 *Times = PushArray(Arena, TimeCount, f32);
+		Info.Times = PushArray(Arena, Info.TimeCount, f32);
+		ParseF32Array(Info.Times, Info.TimeCount, FloatArray.InnerText);
+
+
+		Info.JointCount = JointCount;
+		Info.JointNames = PushArray(Arena, Info.JointCount, string);
+		Info.Duration = Info.Times[Info.TimeCount - 1];
+		Info.FrameRate = Info.Duration / (f32)TimeCount;
+
+		u32 TransformCount = Info.JointCount;
+		mat4 **Transforms = PushArray(Arena, TransformCount, mat4 *);
+		Info.KeyFrameCount = Info.TimeCount;
+		//Info.KeyFrameCount = TimeCount;
+		Info.KeyFrames = PushArray(Arena, Info.KeyFrameCount, key_frame);
+
+		for(u32 Index = 0; Index < TransformCount; ++Index)
+		{
+			Transforms[Index] = PushArray(Arena, TimeCount, mat4);
+		}
+
+		for(u32 Index = 0; Index < Info.KeyFrameCount; ++Index)
+		{
+			Info.KeyFrames[Index].Transforms = PushArray(Arena, Info.JointCount, mat4);
+
+			Info.KeyFrames[Index].Positions = PushArray(Arena, Info.JointCount, v3);
+			Info.KeyFrames[Index].Quaternions = PushArray(Arena, Info.JointCount, quaternion);
+			Info.KeyFrames[Index].Scales = PushArray(Arena, Info.JointCount, v3);
+		}
+
+		for(s32 ChildIndex = 0; ChildIndex < LibAnimations.ChildrenCount; ++ChildIndex)
+		{
+			xml_node *Node = LibAnimations.Children[ChildIndex];
+			Assert(StringsAreSame(Node->Tag, "animation"));
+
+			string JointName = NodeAttributeValueGet(Node, "name");
+
+			Info.JointNames[ChildIndex] = JointName;
+
+			// TODO(Justin): Why is the index - 2?
+			xml_node Sampler = *Node->Children[Node->ChildrenCount - 2];
+			xml_node Input = *Sampler.Children[0];
+			xml_node Output = *Sampler.Children[1];
+
+			string InputSrcName = NodeAttributeValueGet(&Input, "source");
+			string OutputSrcName = NodeAttributeValueGet(&Output, "source");
+
+			InputSrcName.Data++;
+			OutputSrcName.Data++;
+
+			InputSrcName.Size--;
+			OutputSrcName.Size--;
+
+			xml_node N = {};
+			NodeGet(Node, &N, "source", (char *)InputSrcName.Data);
+			N = *N.Children[0];
+
+			string Count = NodeAttributeValueGet(&N, "count");
+			u32 NodeTimeCount = U32FromASCII(Count.Data);
+			Assert(TimeCount == NodeTimeCount);
+			//Assert(Info.JointCount == NodeTimeCount);
+
+			N = {};
+			NodeGet(Node, &N, "source", (char *)OutputSrcName.Data);
+			N = *N.Children[0];
+
+			string_list TransformList = StringSplit(Arena, N.InnerText, (u8 *)Delimeters, ArrayCount(Delimeters));
+			string_node *StrNode = TransformList.First;
+
+			mat4 *M = Transforms[ChildIndex];
+			f32 *Float = (f32 *)M;
+			for(u32 Index = 0; Index < TransformList.Count; ++Index)
+			{
+				string S = StringAllocAndCopy(Arena, StrNode->String);
+				Float[Index] = F32FromASCII(S);
+				StrNode = StrNode->Next;
+			}
+		}
+
+		for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
+		{
+			key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
+			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+			{
+				KeyFrame->Transforms[JointIndex] = Transforms[JointIndex][KeyFrameIndex];
+			}
+		}
+
+		for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
+		{
+			key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
+			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+			{
+				mat4 *JointTransform = KeyFrame->Transforms + JointIndex;
+				affine_decomposition D = Mat4AffineDecomposition(*JointTransform);
+
+				v3 Position = D.P;
+				quaternion Q = RotationToQuaternion(D.R);
+				v3 Scale = V3(D.Cx, D.Cy, D.Cz);
+
+				v3 *P = KeyFrame->Positions + JointIndex;
+				quaternion *Orientation = KeyFrame->Quaternions + JointIndex;
+				v3 *S = KeyFrame->Scales + JointIndex;
+
+				*P = Position;
+				*Orientation = Q;
+				*S = Scale;
+			}
+		}
+	}
+	else
+	{
+		printf("library_animations not found!.");
+	}
+
+	return(Info);
+}
+
+
+#endif
 
 // TODO(Justin): Debug by testing other collada files.
 internal model 

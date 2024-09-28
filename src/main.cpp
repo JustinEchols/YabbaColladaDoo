@@ -93,6 +93,7 @@ ArraySum(u32 *A, u32 Count)
 #include "math_util.h"
 #include "xml.h"
 #include "xml.cpp"
+#include "animation.h"
 #include "mesh.h"
 #include "mesh.cpp"
 #include "animation.cpp"
@@ -183,37 +184,66 @@ int main(int Argc, char **Argv)
 				model *Models[3] = {};
 
 				Models[0] = PushStruct(Arena, model);
-				ConvertMeshFormat(Arena, "test2.mesh", "XBot\\XBot.dae");
 				*Models[0] = ModelLoad(Arena, "test2.mesh");
+				//ConvertMeshFormat(Arena, "test2.mesh", "XBot\\XBot.dae");
 
-				char *AnimationFiles[] =
+
+#if 0
+				char *SourceFiles[] =
 				{
-					"..\\data\\XBot_PushComplete.animation",
-					"..\\data\\XBot_ActionIdle.animation",
-					"..\\data\\XBot_RightTurn.animation",
-					"..\\data\\XBot_LeftTurn.animation",
-					"..\\data\\XBot_RunningToTurn.animation",
-					"..\\data\\XBot_RunningChangeDirection.animation",
-					"..\\data\\XBot_IdleToSprint.animation",
-					"..\\data\\XBot_ActionIdleToStandingIdle.animation",
-					"..\\data\\XBot_IdleLookAround.animation",
-					"..\\data\\XBot_FemaleWalk.animation",
-					"..\\data\\XBot_PushingStart.animation",
-					"..\\data\\XBot_Pushing.animation",
-					"..\\data\\XBot_PushingStop.animation",
+					"XBot\\XBot_ActionIdle.dae",
+					"XBot\\XBot_RightTurn.dae",
+					"XBot\\XBot_LeftTurn.dae",
+					"XBot\\XBot_RunningToTurn.dae",
+					"XBot\\XBot_RunningChangeDirection.dae",
+					"XBot\\XBot_IdleToSprint.dae",
+					"XBot\\XBot_ActionIdleToStandingIdle.dae",
+					"XBot\\XBot_IdleLookAround.dae",
+					"XBot\\XBot_FemaleWalk.dae",
+					"XBot\\XBot_PushingStart.dae",
+					"XBot\\XBot_Pushing.dae",
+					"XBot\\XBot_PushingStop.dae",
+				};
+#endif
+
+				char *DestFiles[] =
+				{
+					"XBot_ActionIdle.animation",
+					"XBot_RightTurn.animation",
+					"XBot_LeftTurn.animation",
+					"XBot_RunningToTurn.animation",
+					"XBot_RunningChangeDirection.animation",
+					"XBot_IdleToSprint.animation",
+					"XBot_ActionIdleToStandingIdle.animation",
+					"XBot_IdleLookAround.animation",
+					"XBot_FemaleWalk.animation",
+					"XBot_PushingStart.animation",
+					"XBot_Pushing.animation",
+					"XBot_PushingStop.animation",
 				};
 
 				Models[0]->Basis.O = V3(0.0f, -80.0f, -300.0f);
 				Models[0]->Basis.X = XAxis();
 				Models[0]->Basis.Y = YAxis();
 				Models[0]->Basis.Z = ZAxis();
-				Models[0]->Animations.Count = ArrayCount(AnimationFiles);
+				Models[0]->Animations.Count = ArrayCount(DestFiles);
 				Models[0]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
 
-				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(AnimationFiles); ++AnimIndex)
+				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(DestFiles); ++AnimIndex)
 				{
+#if 0
+					char *Source = SourceFiles[AnimIndex];
+					char *Dest = DestFiles[AnimIndex];
+
+					ConvertAnimationFormat(Arena, Dest, Source);
+					animation_info TestAnimation = AnimationLoad(Arena, Dest);
+#else
+					char *Dest = DestFiles[AnimIndex];
+					animation_info TestAnimation = AnimationLoad(Arena, Dest);
+#endif
+
 					animation_info *Info = Models[0]->Animations.Info + AnimIndex;
-					*Info = AnimationInfoLoad(Arena, AnimationFiles[AnimIndex]);
+					*Info = TestAnimation;
 				}
 
 				//Models[1] = PushStruct(Arena, model);
