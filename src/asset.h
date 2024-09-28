@@ -36,12 +36,13 @@ struct asset_model_header
 
 struct asset
 {
-	u64 OffsetToData;
+	//u64 OffsetToData;
 	union
 	{
 		asset_mesh_info MeshInfo;
 	};
 };
+
 #pragma pack(pop)
 
 #define ASSET_COUNT 256

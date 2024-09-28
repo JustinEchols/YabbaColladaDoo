@@ -1,4 +1,13 @@
 
+struct texture
+{
+	int Width;
+	int Height;
+	int ChannelCount;
+	u32 Handle;
+	u8 *Memory;
+};
+
 internal texture
 TextureLoad(char *FileName)
 {
@@ -306,7 +315,6 @@ ModelLoad(memory_arena *Arena, char *FileName)
 
 		Model.MeshCount = Header->MeshCount;
 		Model.HasSkeleton = Header->HasSkeleton;
-
 		Model.Meshes = PushArray(Arena, Model.MeshCount, mesh);
 
 		asset_mesh_info *MeshSource = (asset_mesh_info *)(Content + sizeof(asset_model_header));

@@ -439,7 +439,7 @@ ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFile
 	}
 }
 
-
+// TODO(Justin): Debug by testing other collada files.
 internal model 
 ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 {
@@ -734,7 +734,7 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			// and multiply the sum by 2. 
 			//
 
-			u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointInfoCount);
+			u32 JointsAndWeightsCount = 2 * ArraySum(JointCountArray, JointInfoCount);
 			u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
 			ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
 

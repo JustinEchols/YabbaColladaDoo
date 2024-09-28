@@ -63,30 +63,28 @@ struct material_spec
 	f32 Shininess;
 };
 
-
-
 struct mesh
 {
 	string Name;
 
-	u32 IndicesCount; //load
-	u32 VertexCount; //load
-	u32 JointCount; //load
+	u32 IndicesCount;
+	u32 VertexCount;
+	u32 JointCount;
 
-	u32 *Indices; //do not have ot load
-	vertex *Vertices; //load
+	u32 *Indices;
+	vertex *Vertices;
 
-	string *JointNames; //load
-	joint *Joints; //load
+	string *JointNames;
+	joint *Joints;
 
-	mat4 BindTransform; //load
-	mat4 *InvBindTransforms;//load
-	mat4 *JointTransforms; //runtime
-	mat4 *ModelSpaceTransforms; //runtime
+	mat4 BindTransform;
+	mat4 *InvBindTransforms;
+	mat4 *JointTransforms;
+	mat4 *ModelSpaceTransforms;
 
 	material_spec MaterialSpec;
 
-	u32 TextureHandle;//runtime
+	u32 TextureHandle;
 };
 
 struct model

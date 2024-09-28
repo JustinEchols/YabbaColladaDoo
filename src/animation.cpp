@@ -1,5 +1,4 @@
 
-
 inline f32
 KeyFrameDeltaTime(f32 *Times, u32 KeyFrameIndex)
 {

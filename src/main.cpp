@@ -1,6 +1,9 @@
 
 /*
  TODO(Justin):
+ [] Remove GLFW
+ [] Simple animation file format 
+ [] Test different models.
  [] Instead of storing mat4's for animation, store pos, quat, scale and construct for both key frame and model
  [] Different model loading based on whether or not a normal map is available...
  [] Diffuse, ambient, specular, and normal textures in file format 
@@ -67,58 +70,10 @@ typedef s32 b32;
 typedef float f32;
 typedef size_t memory_index;
 
-//
-// NOTE(Justin): Arena allocator
-//
+#include "memory.h"
 
-struct memory_arena
-{
-	u8 *Base;
-	memory_index Size;
-	memory_index Used;
-};
-
-internal void
-ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
-{
-	Arena->Base = Base;
-	Arena->Size = Size;
-	Arena->Used = 0;
-}
-
-internal void *
-PushSize_(memory_arena *Arena, memory_index Size)
-{
-	Assert((Arena->Used + Size) <= Arena->Size);
-
-	void *Result = Arena->Base + Arena->Used;
-	Arena->Used += Size;
-
-	return(Result);
-}
-
-internal void *
-MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
-{
-	u8 *Src = (u8 *)SrcInit;
-	u8 *Dest = (u8 *)DestInit;
-	while(Size--) {*Dest++ = *Src++;}
-
-	return(DestInit);
-}
-
-internal void
-MemoryZero(memory_index Size, void *Src)
-{
-	u8 *P = (u8 *)Src;
-	while(Size--)
-	{
-		*P++ = 0;
-	}
-}
-
-internal u32
-U32ArraySum(u32 *A, u32 Count)
+inline u32
+ArraySum(u32 *A, u32 Count)
 {
 	u32 Result = 0;
 	for(u32 Index = 0; Index < Count; ++Index)
@@ -130,63 +85,7 @@ U32ArraySum(u32 *A, u32 Count)
 
 #include "strings.h"
 #include "strings.cpp"
-
-internal void
-FileWriteStringAndNewLine(FILE *OpenFile, string S)
-{
-	Assert(OpenFile);
-	fputs((char *)S.Data, OpenFile);
-	fputs("\n", OpenFile);
-}
-
-internal void
-FileWriteStringAndNewLine(FILE *OpenFile, char *S)
-{
-	Assert(OpenFile);
-	fputs(S, OpenFile);
-	fputs("\n", OpenFile);
-}
-
-internal s32
-FileSizeGet(FILE *OpenFile)
-{
-	Assert(OpenFile);
-	s32 Result = -1;
-	fseek(OpenFile, 0, SEEK_END);
-	Result = ftell(OpenFile);
-	fseek(OpenFile, 0, SEEK_SET);
-
-	return(Result);
-}
-
-internal void
-FileReadEntireAndNullTerminate(u8 *Dest, s32 Size, FILE *OpenFile)
-{
-	fread(Dest, 1, (size_t)Size, OpenFile);
-	Dest[Size] = '\0';
-}
-
-internal void
-FileReadEntire(u8 *Dest, s32 Size, FILE *OpenFile)
-{
-	fread(Dest, 1, (size_t)Size, OpenFile);
-}
-
-internal b32 
-FileClose(FILE *OpenFile)
-{
-	b32 Result = (fclose(OpenFile) == 0);
-	return(Result);
-}
-
-struct texture
-{
-	int Width;
-	int Height;
-	int ChannelCount;
-	u32 Handle;
-	u8 *Memory;
-};
+#include "file_io.cpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -199,12 +98,10 @@ struct texture
 #include "animation.cpp"
 #include "asset.h"
 #include "asset.cpp"
-//#include "serialize.cpp"
 
 #if RENDER_TEST
 #include "opengl.cpp"
 #include "shaders.h"
-
 
 int main(int Argc, char **Argv)
 {
@@ -320,7 +217,8 @@ int main(int Argc, char **Argv)
 				}
 
 				//Models[1] = PushStruct(Arena, model);
-				//*Models[1] = ModelLoad(Arena, "..\\data\\Arrow.mesh");
+				//ConvertMeshFormat(Arena, "arrow.mesh", "dae\\Arrow.dae");
+				//*Models[1] = ModelLoad(Arena, "arrow.mesh");
 				//Models[1]->Basis.O = V3(1.0f, 5.0f, -2.0f);
 				//Models[1]->Basis.X = XAxis();
 				//Models[1]->Basis.Y = YAxis();
@@ -387,7 +285,7 @@ int main(int Argc, char **Argv)
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-					Angle += DtForFrame;
+					//Angle += DtForFrame;
 					for(u32 ModelIndex = 0; ModelIndex < ArrayCount(Models); ++ModelIndex)
 					{
 						model *Model = Models[ModelIndex];
