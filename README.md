@@ -2,8 +2,7 @@
 An example of loading a collada file that could be used as a starting point.
 
 ## About
-This is a simple Collada loader that is really intended to be used to load a Collada file which would then be processed further depending on the needs, requirements, and format being used in say a game. I have included an example of initilizing a model directly from the XBot collada file and have only tested the initilization using said Collada file. So, more work would need to be done if you intend to use the same routine to initialize some other model.
-Moreoever, the rendering setup and test depends on this model and in general will not work with other models.
+This is a simple Collada loader that is really intended to be used to load a Collada file which would then be processed further depending on the needs, requirements, and format being used in say a game. I have included an example of loading and converting model data as well as animation data. More testing and work is required to ensure that different models load properly. Moreover, the rendering setup and tests are quite minimal. 
 
 The routine to call to load a collada file is ColladaFileLoad. It will load the Collada file and represent it as a unary tree. Each node in the tree has:
 
