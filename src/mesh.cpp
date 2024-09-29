@@ -590,8 +590,6 @@ AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
 
 	return(Info);
 }
-
-
 #endif
 
 // TODO(Justin): Debug by testing other collada files.

@@ -32,7 +32,6 @@ KeyFrameInterpolatedTransform(key_frame *Current, f32 t, key_frame *Next, u32 Jo
 	return(Result);
 }
 
-#if 1
 internal void
 AnimationUpdate(model *Model, f32 dT)
 {
@@ -99,4 +98,3 @@ AnimationUpdate(model *Model, f32 dT)
 		}
 	}
 }
-#endif

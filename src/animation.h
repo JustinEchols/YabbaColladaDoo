@@ -6,6 +6,7 @@ struct key_frame
 	quaternion *Quaternions;
 	v3 *Scales;
 
+	// TODO(Justin): Remove this.
 	mat4 *Transforms;
 };
 

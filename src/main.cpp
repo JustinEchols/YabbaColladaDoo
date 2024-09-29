@@ -184,42 +184,52 @@ int main(int Argc, char **Argv)
 				model *Models[3] = {};
 
 				Models[0] = PushStruct(Arena, model);
-				*Models[0] = ModelLoad(Arena, "test2.mesh");
-				//ConvertMeshFormat(Arena, "test2.mesh", "XBot\\XBot.dae");
-
-
-#if 0
+				ConvertMeshFormat(Arena, "XBot.mesh", "models\\XBot.dae");
+				*Models[0] = ModelLoad(Arena, "XBot.mesh");
+#if 1
 				char *SourceFiles[] =
 				{
-					"XBot\\XBot_ActionIdle.dae",
-					"XBot\\XBot_RightTurn.dae",
-					"XBot\\XBot_LeftTurn.dae",
-					"XBot\\XBot_RunningToTurn.dae",
-					"XBot\\XBot_RunningChangeDirection.dae",
-					"XBot\\XBot_IdleToSprint.dae",
-					"XBot\\XBot_ActionIdleToStandingIdle.dae",
-					"XBot\\XBot_IdleLookAround.dae",
-					"XBot\\XBot_FemaleWalk.dae",
-					"XBot\\XBot_PushingStart.dae",
-					"XBot\\XBot_Pushing.dae",
-					"XBot\\XBot_PushingStop.dae",
+					"animations\\XBot_ActionIdle.dae",
+					"animations\\XBot_ActionIdleToStandingIdle.dae",
+					"animations\\XBot_FemaleWalk.dae",
+					"animations\\XBot_IdleLookAround.dae",
+					//"animations\\XBot_IdleShiftWeight.dae",
+					"animations\\XBot_IdleToSprint.dae",
+					"animations\\XBot_LeftTurn.dae",
+					"animations\\XBot_Pushing.dae",
+					"animations\\XBot_PushingStart.dae",
+					"animations\\XBot_PushingStop.dae",
+					"animations\\XBot_RightTurn.dae",
+					"animations\\XBot_RunToStop.dae",
+					"animations\\XBot_Running.dae",
+					"animations\\XBot_Running180.dae",
+					"animations\\XBot_RunningChangeDirection.dae",
+					"animations\\XBot_RunningToTurn.dae",
+					"animations\\XBot_Walking.dae",
+					"animations\\XBot_WalkingTurn180.dae"
 				};
 #endif
 
 				char *DestFiles[] =
 				{
 					"XBot_ActionIdle.animation",
-					"XBot_RightTurn.animation",
-					"XBot_LeftTurn.animation",
-					"XBot_RunningToTurn.animation",
-					"XBot_RunningChangeDirection.animation",
-					"XBot_IdleToSprint.animation",
 					"XBot_ActionIdleToStandingIdle.animation",
-					"XBot_IdleLookAround.animation",
 					"XBot_FemaleWalk.animation",
-					"XBot_PushingStart.animation",
+					"XBot_IdleLookAround.animation",
+					//"XBot_IdlfrhiftWeight.animation",
+					"XBot_IdleToSprint.animation",
+					"XBot_LeftTurn.animation",
 					"XBot_Pushing.animation",
+					"XBot_PushingStart.animation",
 					"XBot_PushingStop.animation",
+					"XBot_RightTurn.animation",
+					"XBot_RunToStop.animation",
+					"XBot_Running.animation",
+					"XBot_Running180.animation",
+					"XBot_RunningChangeDirection.animation",
+					"XBot_RunningToTurn.animation",
+					"XBot_Walking.animation",
+					"XBot_WalkingTurn180.animation"
 				};
 
 				Models[0]->Basis.O = V3(0.0f, -80.0f, -300.0f);
@@ -231,7 +241,7 @@ int main(int Argc, char **Argv)
 
 				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(DestFiles); ++AnimIndex)
 				{
-#if 0
+#if 1
 					char *Source = SourceFiles[AnimIndex];
 					char *Dest = DestFiles[AnimIndex];
 
@@ -316,6 +326,8 @@ int main(int Argc, char **Argv)
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 					//Angle += DtForFrame;
+					//v3 LightDir = V3(2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle));
+					v3 LightDir = V3(0.0f, 0.0f, 1.0f);//2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle));
 					for(u32 ModelIndex = 0; ModelIndex < ArrayCount(Models); ++ModelIndex)
 					{
 						model *Model = Models[ModelIndex];
@@ -324,7 +336,7 @@ int main(int Argc, char **Argv)
 							if(Model->HasSkeleton)
 							{
 								glUseProgram(Shaders[0]);
-								UniformV3Set(Shaders[0], "LightDir", V3(2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle)));
+								UniformV3Set(Shaders[0], "LightDir", LightDir);
 								OpenGLDrawAnimatedModel(Models[ModelIndex], Shaders[0]);
 							}
 							else

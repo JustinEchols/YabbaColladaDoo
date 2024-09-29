@@ -3,7 +3,6 @@
 #pragma pack(push, 1)
 struct asset_mesh_info
 {
-	// NOTE(Justin): Since this struct is serialize/de-serialzed we use a fixed sized buffer for the name.
 	u8 Name[32];
 	u32 IndicesCount;
 	u32 VertexCount;
@@ -39,13 +38,6 @@ struct asset_joint_name
 	u8 Name[64];
 };
 
-struct asset_key_frame
-{
-	v3 *Positions;
-	quaternion *Quaternions;
-	v3 *Scales;
-};
-
 struct asset_animation_info
 {
 	u64 OffsetToPositions;
@@ -74,7 +66,6 @@ struct asset_animation_header
 
 struct asset
 {
-	//u64 OffsetToData;
 	union
 	{
 		asset_mesh_info MeshInfo;
@@ -83,6 +74,7 @@ struct asset
 };
 
 #pragma pack(pop)
+
 
 #define ASSET_COUNT 256
 struct asset_manager

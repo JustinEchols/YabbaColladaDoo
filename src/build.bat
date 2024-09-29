@@ -1,7 +1,7 @@
 @echo off
 
 set MainFile=main.cpp
-set CommonCompilerFlags= -Od -nologo -W4 -wd4100 -wd4201 -wd4996 -wd4505 -Zi -DGLEW_STATIC=1 -D__CRT_SECURE_NO_WARNINGS=1 -DRENDER_TEST=1
+set CommonCompilerFlags= -O2 -nologo -W4 -wd4100 -wd4201 -wd4996 -wd4505 -Zi -DGLEW_STATIC=1 -D__CRT_SECURE_NO_WARNINGS=1 -DRENDER_TEST=1
 set CommonLinkerFlags=-incremental:no gdi32.lib user32.lib shell32.lib msvcrt.lib opengl32.lib winmm.lib glew32s.lib glfw3.lib
 
 set IncludeDirectories= /I "../dependencies/GLFW64/include" /I "../dependencies/GLEW/include"

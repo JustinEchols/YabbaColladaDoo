@@ -62,20 +62,26 @@ void main()
 {
 	vec3 LightColor = vec3(1.0);
 	vec3 Normal = normalize(N);
-	bool FacingTowards = dot(Normal, LightDir) > 0.0;
+	vec3 Direction = -1.0f * LightDir;
+	float D = max(dot(Normal, LightDir), 0.0);
 
-	vec3 Diff = vec3(0.0);
+	vec3 Diff = D * LightColor * Diffuse.xyz;
 	vec3 Spec = vec3(0.0);
-	if(FacingTowards)
-	{
-		float D = max(dot(Normal, LightDir), 0.0);
-		Diff = LightColor * D * Diffuse.xyz;
 
-		vec3 ViewDir = normalize(CameraP);
-		vec3 R = reflect(LightDir, Normal);
-		float S = pow(max(dot(ViewDir, R), 0.0), Shininess);
-		Spec = LightColor * S * Specular.xyz;
-	}
+	//bool FacingTowards = dot(Normal, LightDir) > 0.0;
+
+	//vec3 Diff = vec3(0.0);
+	//vec3 Spec = vec3(0.0);
+	//if(FacingTowards)
+	//{
+	//	float D = max(dot(Normal, LightDir), 0.0);
+	//	Diff = LightColor * D * Diffuse.xyz;
+
+	//	vec3 ViewDir = normalize(CameraP);
+	//	vec3 R = reflect(LightDir, Normal);
+	//	float S = pow(max(dot(ViewDir, R), 0.0), Shininess);
+	//	Spec = LightColor * S * Specular.xyz;
+	//}
 
 	Result = vec4(Diff + Spec, 1.0);
 })";
