@@ -12,7 +12,7 @@ The routine to call to load a collada file is ColladaFileLoad. It will load the 
 - A parent node (if it is not the root node)
 - An array of children nodes
 
-The number of attributes of a node is set to a compile time constant COLLADA_ATTRIBUTE_MAX_COUNT and the number of children is also set to a compile time constant of COLLADA_NODE_CHILDREN_MAX_COUNT. This wastes memory but again this program is intended to be used to load a Collada file which would then be processed to another format which would then be used in some application.
+The number of attributes of a node is set to a compile time constant COLLADA_ATTRIBUTE_MAX_COUNT and the number of children is also set to a compile time constant of COLLADA_NODE_CHILDREN_MAX_COUNT. This wastes memory but again this program is intended to be used to load a Collada file which would then be processed to another format to be used in some other application.
 
 ## Dependencies
 GLFW and GLEW which facilitate rendering tests via OpenGL.
