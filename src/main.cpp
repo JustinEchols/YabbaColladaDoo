@@ -38,15 +38,6 @@
 #define COLLADA_ATTRIBUTE_MAX_COUNT 10
 #define COLLADA_NODE_CHILDREN_MAX_COUNT 75
 
-#define INDICES_PER_TRIANGLE 3
-#define POSITIONS_PER_TRIANGLE 3
-#define NORMALS_PER_TRIANGLE 3
-#define UVS_PER_TRIANGLE 3
-
-#define FLOATS_PER_POSITION 3
-#define FLOATS_PER_NORMAL 3
-#define FLOATS_PER_UV 2
-
 #define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
 #define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
 #define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
