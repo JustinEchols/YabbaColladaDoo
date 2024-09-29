@@ -289,9 +289,10 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 				InnerTextIndex = 0;
 				Index -= ((s32)strlen("<COLLADA") + 1);
 
-				u32 DelimeterCount = 2;
+
 				char TagDelimeters[] = "<>";
 				char InnerTagDelimeters[] = "=\"";
+				u32 DelimeterCount = ArrayCount(TagDelimeters);
 
 				string Data = String((u8 *)(Content + Index));
 				string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, DelimeterCount);
@@ -377,14 +378,14 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 		}
 		else
 		{
-			printf("Error file %s has size %d", FileName, Size);
+			printf("Error file %s has size %d\n", FileName, Size);
 		}
 
 		fclose(FileHandle);
 	}
 	else
 	{
-		printf("Error opening file %s", FileName);
+		printf("Error opening file %s\n", FileName);
 		perror("");
 	}
 

@@ -1,6 +1,7 @@
 
 /*
  TODO(Justin):
+ [] File paths from build directory
  [] Remove GLFW
  [] Simple animation file format 
  [] Test different models.
@@ -106,10 +107,10 @@ ArraySum(u32 *A, u32 Count)
 
 int main(int Argc, char **Argv)
 {
-	void *Memory = calloc(Megabyte(512), sizeof(u8));
+	void *Memory = calloc(Megabyte(1024), sizeof(u8));
 
 	memory_arena Arena_;
-	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(512));
+	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(1024));
 	memory_arena *Arena = &Arena_;
 
 	glfwSetErrorCallback(GLFWErrorCallback);
@@ -181,13 +182,31 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Model info
 				//
 
-				model *Models[3] = {};
+				mat4 Scale = Mat4Scale(0.2f);
+				char *ModelSourceFiles[] = 
+				{
+					"models\\XBot.dae",
+					"models\\YBot.dae",
+				};
+				char *ModelDestFiles[] = 
+				{
+					"XBot.mesh",
+					"YBot.mesh",
+				};
 
-				Models[0] = PushStruct(Arena, model);
-				ConvertMeshFormat(Arena, "XBot.mesh", "models\\XBot.dae");
-				*Models[0] = ModelLoad(Arena, "XBot.mesh");
-#if 1
-				char *SourceFiles[] =
+				model *Models[3] = {};
+				for(u32 FileIndex = 0; FileIndex < ArrayCount(ModelDestFiles); ++FileIndex)
+				{
+					Models[FileIndex] = PushStruct(Arena, model);
+					ConvertMeshFormat(Arena, ModelDestFiles[FileIndex], ModelSourceFiles[FileIndex]);
+					*Models[FileIndex] = ModelLoad(Arena, ModelDestFiles[FileIndex]);
+				}
+
+				//
+				// NOTE(Justin): Animation info
+				//
+
+				char *AnimSourceFiles[] =
 				{
 					"animations\\XBot_ActionIdle.dae",
 					"animations\\XBot_ActionIdleToStandingIdle.dae",
@@ -208,15 +227,14 @@ int main(int Argc, char **Argv)
 					"animations\\XBot_Walking.dae",
 					"animations\\XBot_WalkingTurn180.dae"
 				};
-#endif
 
-				char *DestFiles[] =
+				char *AnimDestFiles[] =
 				{
 					"XBot_ActionIdle.animation",
 					"XBot_ActionIdleToStandingIdle.animation",
 					"XBot_FemaleWalk.animation",
 					"XBot_IdleLookAround.animation",
-					//"XBot_IdlfrhiftWeight.animation",
+					//"XBot_IdleShiftWeight.animation",
 					"XBot_IdleToSprint.animation",
 					"XBot_LeftTurn.animation",
 					"XBot_Pushing.animation",
@@ -232,23 +250,34 @@ int main(int Argc, char **Argv)
 					"XBot_WalkingTurn180.animation"
 				};
 
-				Models[0]->Basis.O = V3(0.0f, -80.0f, -300.0f);
+				Models[0]->Basis.O = V3(100.0f, -80.0f, -300.0f);
 				Models[0]->Basis.X = XAxis();
 				Models[0]->Basis.Y = YAxis();
 				Models[0]->Basis.Z = ZAxis();
-				Models[0]->Animations.Count = ArrayCount(DestFiles);
+				Models[0]->Animations.Count = ArrayCount(AnimDestFiles);
 				Models[0]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
 
-				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(DestFiles); ++AnimIndex)
+				Models[1]->Basis.O = V3(-100.0f, -80.0f, -400.0f);
+				Models[1]->Basis.X = XAxis();
+				Models[1]->Basis.Y = YAxis();
+				Models[1]->Basis.Z = ZAxis();
+				Models[1]->Animations.Count = 1;
+				Models[1]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
+				animation_info *YInfo = Models[1]->Animations.Info;
+				ConvertAnimationFormat(Arena, "YBot_RunningJump.animation", "animations\\YBot_RunningJump.dae");
+				*YInfo = AnimationLoad(Arena, "YBot_RunningJump.animation");
+
+
+				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(AnimDestFiles); ++AnimIndex)
 				{
-#if 1
-					char *Source = SourceFiles[AnimIndex];
-					char *Dest = DestFiles[AnimIndex];
+#if 0
+					char *Source = AnimSourceFiles[AnimIndex];
+					char *Dest = AnimDestFiles[AnimIndex];
 
 					ConvertAnimationFormat(Arena, Dest, Source);
 					animation_info TestAnimation = AnimationLoad(Arena, Dest);
 #else
-					char *Dest = DestFiles[AnimIndex];
+					char *Dest = AnimDestFiles[AnimIndex];
 					animation_info TestAnimation = AnimationLoad(Arena, Dest);
 #endif
 
@@ -256,15 +285,7 @@ int main(int Argc, char **Argv)
 					*Info = TestAnimation;
 				}
 
-				//Models[1] = PushStruct(Arena, model);
-				//ConvertMeshFormat(Arena, "arrow.mesh", "dae\\Arrow.dae");
-				//*Models[1] = ModelLoad(Arena, "arrow.mesh");
-				//Models[1]->Basis.O = V3(1.0f, 5.0f, -2.0f);
-				//Models[1]->Basis.X = XAxis();
-				//Models[1]->Basis.Y = YAxis();
-				//Models[1]->Basis.Z = -1.0f * ZAxis();
-				//Models[1]->Meshes[0].TextureHandle = Textures[0].Handle;
-				mat4 Scale = Mat4Scale(0.2f);
+
 
 				//
 				// NOTE(Justin): Opengl shader initialization
@@ -326,8 +347,7 @@ int main(int Argc, char **Argv)
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 					//Angle += DtForFrame;
-					//v3 LightDir = V3(2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle));
-					v3 LightDir = V3(0.0f, 0.0f, 1.0f);//2.0f * cosf(Angle), 0.0f, 2.0f * sinf(Angle));
+					v3 LightDir = V3(0.0f, 0.0f, 1.0f);
 					for(u32 ModelIndex = 0; ModelIndex < ArrayCount(Models); ++ModelIndex)
 					{
 						model *Model = Models[ModelIndex];

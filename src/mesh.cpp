@@ -244,204 +244,7 @@ FileWriteJoints(FILE *OutputFile, memory_arena *Arena, xml_node *Root, string *J
 }
 
 
-#if 0
-internal void
-ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFileName)
-{
-	FILE *OutputFile = fopen(OutputFileName, "w");
-	if(OutputFile)
-	{
-		xml_node *Root = DaeFile.Root;
-		xml_node LibAnimations = {};
-		NodeGet(Root, &LibAnimations, "library_animations");
-		if(LibAnimations.ChildrenCount != 0)
-		{
-			u8 Delimeters[] = " \n\r";
 
-			if(LibAnimations.ChildrenCount == 1)
-			{
-				LibAnimations = *LibAnimations.Children[0];
-			}
-			u32 JointCount = LibAnimations.ChildrenCount;
-
-			xml_node FloatArray = {};
-			NodeGet(&LibAnimations, &FloatArray, "float_array");
-			string StrTimeCount = NodeAttributeValueGet(&FloatArray, "count");
-
-			animation_info Info = {};
-			Info.JointCount = JointCount;
-			Info.JointNames = PushArray(Arena, Info.JointCount, string);
-
-			u32 TimeCount = U32FromASCII(StrTimeCount);
-			f32 *Times = PushArray(Arena, TimeCount, f32);
-
-			u32 TransformCount = Info.JointCount;
-			mat4 **Transforms = PushArray(Arena, TransformCount, mat4 *);
-			//Info.KeyFrameCount = Info.TimeCount;
-			Info.KeyFrameCount = Info.TimeCount;
-			Info.KeyFrames = PushArray(Arena, Info.KeyFrameCount, key_frame);
-
-			for(u32 Index = 0; Index < TransformCount; ++Index)
-			{
-				Transforms[Index] = PushArray(Arena, Info.TimeCount, mat4);
-			}
-
-			for(u32 Index = 0; Index < Info.KeyFrameCount; ++Index)
-			{
-				Info.KeyFrames[Index].Transforms = PushArray(Arena, Info.JointCount, mat4);
-			}
-
-			for(s32 ChildIndex = 0; ChildIndex < LibAnimations.ChildrenCount; ++ChildIndex)
-			{
-				xml_node *Node = LibAnimations.Children[ChildIndex];
-				Assert(StringsAreSame(Node->Tag, "animation"));
-
-				string JointName = NodeAttributeValueGet(Node, "name");
-
-				Info.JointNames[ChildIndex] = JointName;
-
-				xml_node Sampler = *Node->Children[Node->ChildrenCount - 2];
-				xml_node Input = *Sampler.Children[0];
-				xml_node Output = *Sampler.Children[1];
-
-				string InputSrcName = NodeAttributeValueGet(&Input, "source");
-				string OutputSrcName = NodeAttributeValueGet(&Output, "source");
-
-				InputSrcName.Data++;
-				OutputSrcName.Data++;
-
-				InputSrcName.Size--;
-				OutputSrcName.Size--;
-
-				xml_node N = {};
-#if 0
-
-				NodeGet(Node, &N, "source", (char *)InputSrcName.Data);
-				N = *N.Children[0];
-
-				string Count = NodeAttributeValueGet(&N, "count");
-
-				u32 NodeTimeCount = U32FromASCII(Count.Data);
-				Assert(Info.TimeCount == NodeTimeCount);
-				Assert(Info.TransformCount == NodeTimeCount);
-
-
-#endif
-
-				N = {};
-				NodeGet(Node, &N, "source", (char *)OutputSrcName.Data);
-				N = *N.Children[0];
-
-				string_list TransformList = StringSplit(Arena, N.InnerText, (u8 *)Delimeters, 3);
-				string_node *StrNode = TransformList.First;
-
-				mat4 *M = Transforms[ChildIndex];
-				f32 *Float = (f32 *)M;
-				for(u32 Index = 0; Index < TransformList.Count; ++Index)
-				{
-					string S = StringAllocAndCopy(Arena, StrNode->String);
-					Float[Index] = F32FromASCII(S);
-					StrNode = StrNode->Next;
-				}
-			}
-
-			for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
-			{
-				key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
-				for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
-				{
-					KeyFrame->Transforms[JointIndex] = Transforms[JointIndex][KeyFrameIndex];
-				}
-			}
-
-			string StrJointCount = DigitToString(Arena, Info.JointCount);
-			fputs("JOINTS: ", OutputFile);
-			fputs((char *)StrJointCount.Data, OutputFile);
-			fputs("\n", OutputFile);
-			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
-			{
-				string *JointName = Info.JointNames + JointIndex;
-				fputs((char *)JointName->Data, OutputFile);
-				fputs("\n", OutputFile);
-			}
-
-			fputs("TIMES: ", OutputFile);
-			fputs((char *)StrTimeCount.Data, OutputFile);
-			fputs("\n", OutputFile);
-			string_list TimeList = StringSplit(Arena, FloatArray.InnerText, Delimeters, ArrayCount(Delimeters));
-			string_node *StrNode = TimeList.First;
-			for(u32 Index = 0; Index < TimeList.Count; ++Index)
-			{
-				string S = StringAllocAndCopy(Arena, StrNode->String);
-				char *Cstr = (char *)S.Data;
-				fputs(Cstr, OutputFile);
-				fputs(" ", OutputFile);
-				StrNode = StrNode->Next;
-			}
-			fputs("\n", OutputFile);
-
-			for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
-			{
-				string Index = DigitToString(Arena, KeyFrameIndex);
-				fputs("KEY_FRAME: ", OutputFile);
-				fputs((char *)Index.Data, OutputFile);
-				fputs("\n", OutputFile);
-
-				key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
-				for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
-				{
-					mat4 *JointTransform = KeyFrame->Transforms + JointIndex;
-
-					affine_decomposition D = Mat4AffineDecomposition(*JointTransform);
-
-					quaternion Q = RotationToQuaternion(D.R);
-
-					string_array StrP = F32ArrayToStringArray(Arena, (f32 *)&D.P, 3);
-					string_array StrQ = F32ArrayToStringArray(Arena, (f32 *)&Q, 4);
-					for(u32 StrIndex = 0; StrIndex < StrP.Count; ++StrIndex)
-					{
-						string *S = StrP.Strings + StrIndex;
-						fputs((char *)S->Data, OutputFile);
-						fputs(" ", OutputFile);
-					}
-					fputs("\n", OutputFile);
-
-					for(u32 StrIndex = 0; StrIndex < StrQ.Count; ++StrIndex)
-					{
-						string *S = StrQ.Strings + StrIndex;
-						fputs((char *)S->Data, OutputFile);
-						fputs(" ", OutputFile);
-					}
-					fputs("\n", OutputFile);
-
-					string Cx = F32ToString(Arena, D.Cx);
-					string Cy = F32ToString(Arena, D.Cy);
-					string Cz = F32ToString(Arena, D.Cz);
-
-					fputs((char *)Cx.Data, OutputFile);
-					fputs(" ", OutputFile);
-					fputs((char *)Cy.Data, OutputFile);
-					fputs(" ", OutputFile);
-					fputs((char *)Cz.Data, OutputFile);
-					fputs(" ", OutputFile);
-
-					fputs("\n", OutputFile);
-					fputs("\n", OutputFile);
-				}
-				fputs("\n", OutputFile);
-			}
-		}
-		else
-		{
-			printf("library_animations not found!.");
-		}
-	}
-	else
-	{
-		perror("Could not open file");
-	}
-}
-#else
 
 internal animation_info 
 AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
@@ -469,14 +272,11 @@ AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
 		NodeGet(&LibAnimations, &FloatArray, "float_array");
 		string StrTimeCount = NodeAttributeValueGet(&FloatArray, "count");
 
-		//animation_info Info = {};
-
 		u32 TimeCount = U32FromASCII(StrTimeCount);
 		Info.TimeCount = TimeCount;//U32FromASCII(StrTimeCount);
-								   //f32 *Times = PushArray(Arena, TimeCount, f32);
+		//f32 *Times = PushArray(Arena, TimeCount, f32);
 		Info.Times = PushArray(Arena, Info.TimeCount, f32);
 		ParseF32Array(Info.Times, Info.TimeCount, FloatArray.InnerText);
-
 
 		Info.JointCount = JointCount;
 		Info.JointNames = PushArray(Arena, Info.JointCount, string);
@@ -590,7 +390,6 @@ AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
 
 	return(Info);
 }
-#endif
 
 // TODO(Justin): Debug by testing other collada files.
 internal model 
