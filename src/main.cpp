@@ -173,7 +173,7 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Model info
 				//
 
-				mat4 Scale = Mat4Scale(0.2f);
+
 				char *ModelSourceFiles[] = 
 				{
 					"models\\XBot.dae",
@@ -241,23 +241,23 @@ int main(int Argc, char **Argv)
 					"XBot_WalkingTurn180.animation"
 				};
 
-				Models[0]->Basis.O = V3(100.0f, -80.0f, -300.0f);
+				Models[0]->Basis.O = V3(100.0f, -80.0f, -400.0f);
 				Models[0]->Basis.X = XAxis();
 				Models[0]->Basis.Y = YAxis();
 				Models[0]->Basis.Z = ZAxis();
 				Models[0]->Animations.Count = ArrayCount(AnimDestFiles);
 				Models[0]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
 
-				Models[1]->Basis.O = V3(-100.0f, -80.0f, -400.0f);
+				Models[1]->Basis.O = V3(-100.0f, -80.0f, -500.0f);
 				Models[1]->Basis.X = XAxis();
 				Models[1]->Basis.Y = YAxis();
 				Models[1]->Basis.Z = ZAxis();
 				Models[1]->Animations.Count = 1;
 				Models[1]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
 				animation_info *YInfo = Models[1]->Animations.Info;
-				ConvertAnimationFormat(Arena, "YBot_RunningJump.animation", "animations\\YBot_RunningJump.dae");
+				//ConvertAnimationFormat(Arena, "YBot_RunningJump.animation", "animations\\YBot_RunningJump.dae");
 				*YInfo = AnimationLoad(Arena, "YBot_RunningJump.animation");
-
+				mat4 Scale = Mat4Scale(0.2f);
 
 				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(AnimDestFiles); ++AnimIndex)
 				{
@@ -275,8 +275,6 @@ int main(int Argc, char **Argv)
 					animation_info *Info = Models[0]->Animations.Info + AnimIndex;
 					*Info = TestAnimation;
 				}
-
-
 
 				//
 				// NOTE(Justin): Opengl shader initialization
@@ -385,7 +383,6 @@ int main(int Argc, char **Argv)
 	{
 		b32 ConvertMesh = false;
 		b32 ConvertAnimation = false;
-		b32 ShouldSerialize = false;
 
 		if(StringsAreSame(ConversionType, "-a"))
 		{
@@ -396,19 +393,6 @@ int main(int Argc, char **Argv)
 		{
 			ConvertMesh = true;
 		}
-
-		if(StringsAreSame(ConversionType, "-ab"))
-		{
-			ConvertAnimation = true;
-			ShouldSerialize = true;
-		}
-
-		if(StringsAreSame(ConversionType, "-mb"))
-		{
-			ConvertMesh = true;
-			ShouldSerialize = true;
-		}
-
 
 		if(ConvertMesh || ConvertAnimation)
 		{
@@ -451,26 +435,21 @@ int main(int Argc, char **Argv)
 
 					if(ConvertMesh)
 					{
+						char *Out = (char *)MeshFileName.Data;
 						printf("Converting mesh %s\n", (char *)MeshFileName.Data);
-						ConvertMeshFormat(Arena, LoadedDAE, (char *)MeshFileName.Data);
+						ConvertMeshFormat(Arena, Out, FileName);
+						printf("Done\n");
+						printf("File saved as %s\n", Out);
 					}
 
 					if(ConvertAnimation)
 					{
+						char *Out = (char *)AnimFileName.Data;
 						printf("Converting animation %s\n", (char *)AnimFileName.Data);
-						ConvertAnimationFormat(Arena, LoadedDAE, (char *)AnimFileName.Data);
+						ConvertAnimationFormat(Arena, (char *)AnimFileName.Data, FileName);
+						printf("Done\n");
+						printf("File saved as %s\n", Out);
 					}
-
-					if(ConvertMesh && ShouldSerialize)
-					{
-						model Model = ModelLoad(Arena, (char *)MeshFileName.Data);
-						Serialize(&Model);
-					}
-
-					printf("Done\n");
-
-					//model Model = ModelLoad(Arena, (char *)MeshFileName.Data);
-					//animation_info Info = AnimationInfoLoad2(Arena, (char *)AnimFileName.Data);
 				}
 			}
 			else
@@ -501,5 +480,4 @@ int main(int Argc, char **Argv)
 
 	return(0);
 }
-
 #endif

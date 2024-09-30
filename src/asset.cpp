@@ -30,6 +30,7 @@ ConvertMeshFormat(memory_arena *Arena, char *OutputFileName, char *FileName)
 		Header.Version = MODEL_FILE_VERSION;
 		Header.HasSkeleton = Model.HasSkeleton;
 		Header.MeshCount = Model.MeshCount;
+		Header.OffsetToMeshInfo = sizeof(Header);
 
 		fwrite(&Header, sizeof(Header), 1, Out);
 
@@ -37,7 +38,7 @@ ConvertMeshFormat(memory_arena *Arena, char *OutputFileName, char *FileName)
 		Manager.AssetCount = Header.MeshCount;
 
 		u32 HeaderSize = sizeof(Header);
-		u32 TotalSize = HeaderSize + (Manager.AssetCount * sizeof(asset));
+		u32 TotalSize = HeaderSize + (Manager.AssetCount * sizeof(asset_mesh_info));
 
 		// NOTE(Justin): Skip past the header block and asset array block.
 		// Then write out the vertices, joints, and xforms. Also populate the
@@ -149,7 +150,7 @@ ModelLoad(memory_arena *Arena, char *FileName)
 		Model.HasSkeleton = Header->HasSkeleton;
 		Model.Meshes = PushArray(Arena, Model.MeshCount, mesh);
 
-		asset_mesh_info *MeshSource = (asset_mesh_info *)(Content + sizeof(asset_model_header));
+		asset_mesh_info *MeshSource = (asset_mesh_info *)(Content + Header->OffsetToMeshInfo);
 		for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 		{
 			mesh *Mesh = Model.Meshes + MeshIndex;
@@ -221,7 +222,7 @@ ConvertAnimationFormat(memory_arena *Arena, char *OutputFileName, char *DaeFileN
 
 		Header.OffsetToTimes = sizeof(Header);
 		Header.OffsetToNames = Header.OffsetToTimes + TimesTotalSize;
-		Header.OffsetToKeyFrames = Header.OffsetToNames + NamesTotalSize;
+		Header.OffsetToAnimationInfo = Header.OffsetToNames + NamesTotalSize;
 
 		fwrite(&Header, sizeof(Header), 1, Out);
 
@@ -334,7 +335,7 @@ AnimationLoad(memory_arena *Arena, char *FileName)
 		}
 
 		Info.KeyFrames = PushArray(Arena, Info.TimeCount, key_frame);
-		asset_animation_info *AnimationSource = (asset_animation_info *)(Content + Header->OffsetToKeyFrames);
+		asset_animation_info *AnimationSource = (asset_animation_info *)(Content + Header->OffsetToAnimationInfo);
 		for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
 		{
 			key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;

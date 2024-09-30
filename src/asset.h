@@ -23,7 +23,7 @@ struct asset_joint_info
 	mat4 Transform;
 };
 
-#define MODEL_FILE_MAGIC_NUMBER ((1 << 24) | (2 << 16) | (3 << 4) | (4 << 0))
+#define MODEL_FILE_MAGIC_NUMBER ((1 << 24) | (2 << 16) | (3 << 8) | (4 << 0))
 #define MODEL_FILE_VERSION 0
 struct asset_model_header
 {
@@ -31,6 +31,7 @@ struct asset_model_header
 	u32 Version;
 	b32 HasSkeleton;
 	u32 MeshCount;
+	u64 OffsetToMeshInfo;
 };
 
 struct asset_joint_name
@@ -45,7 +46,7 @@ struct asset_animation_info
 	u64 OffsetToScales;
 };
 
-#define ANIMATION_FILE_MAGIC_NUMBER ((0x1 << 24) | (0x2 << 16) | (0x3 << 4) | (0x4 << 0))
+#define ANIMATION_FILE_MAGIC_NUMBER ((0x1 << 24) | (0x2 << 16) | (0x3 << 8) | (0x4 << 0))
 #define ANIMATION_FILE_VERSION 0
 struct asset_animation_header
 {
@@ -61,7 +62,7 @@ struct asset_animation_header
 
 	u64 OffsetToTimes;
 	u64 OffsetToNames;
-	u64 OffsetToKeyFrames;
+	u64 OffsetToAnimationInfo;
 };
 
 struct asset
@@ -74,7 +75,6 @@ struct asset
 };
 
 #pragma pack(pop)
-
 
 #define ASSET_COUNT 256
 struct asset_manager

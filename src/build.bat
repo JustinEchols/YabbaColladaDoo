@@ -13,7 +13,7 @@ pushd ..\build
 REM Render test compile
 cl ..\src\%MainFile% %CommonCompilerFlags% %IncludeDirectories% /link /NODEFAULTLIB:"LIBCMT" %LibDirectories% %CommonLinkerFlags%
 
-REM Conversion compile
+REM Conversion only compile
 REM cl ..\src\%MainFile% -Od -nologo -W4 -wd4100 -wd4201 -wd4505 -Zi -D_CRT_SECURE_NO_WARNINGS=1 -DRENDER_TEST=0
 popd
 
