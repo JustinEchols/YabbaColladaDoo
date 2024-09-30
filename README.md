@@ -31,4 +31,4 @@ Visual Studio 2019 if you intend to use the build.bat file to build.
 \YabbaColladaDoo\src> build.bat
 
 ## Run
-\YabbaColladaDoo\src> ..\build\main.exe
+If running the rendering test, the application needs to be run in a debugger and the working directory must be set to the data directory. The conversion only can be run from a terminal.
