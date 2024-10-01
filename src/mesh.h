@@ -45,7 +45,6 @@ struct mesh
 	u32 *Indices;
 	vertex *Vertices;
 
-	string *JointNames;
 	joint *Joints;
 
 	mat4 BindTransform;

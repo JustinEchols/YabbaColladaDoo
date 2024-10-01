@@ -170,7 +170,6 @@ ModelLoad(memory_arena *Arena, char *FileName)
 			//Mesh->Joints = (joint *)(Content + Source->OffsetToJoints);
 
 			Mesh->Joints = PushArray(Arena, Mesh->JointCount, joint);
-			Mesh->JointNames = PushArray(Arena, Mesh->JointCount, string);
 			Mesh->JointTransforms = PushArray(Arena, Mesh->JointCount, mat4);
 			Mesh->ModelSpaceTransforms = PushArray(Arena, Mesh->JointCount, mat4);
 			mat4 I = Mat4Identity();
@@ -183,7 +182,6 @@ ModelLoad(memory_arena *Arena, char *FileName)
 				Dest->ParentIndex = JointSource->ParentIndex;
 				Dest->Transform = JointSource->Transform;
 
-				Mesh->JointNames[JointIndex] = Dest->Name;
 				Mesh->JointTransforms[JointIndex] = I;
 				Mesh->ModelSpaceTransforms[JointIndex] = I;
 

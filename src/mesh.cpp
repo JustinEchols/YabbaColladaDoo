@@ -1,4 +1,5 @@
 
+// TODO(Justin): String hash!
 internal s32
 JointIndexGet(string *JointNames, u32 JointCount, string JointName)
 {
@@ -15,72 +16,6 @@ JointIndexGet(string *JointNames, u32 JointCount, string JointName)
 
 	return(Result);
 }
-
-#if 0
-internal void
-AnimationInfoGet(memory_arena *Arena, xml_node *Root, animation_info *AnimationInfo)
-{
-	u32 AnimationInfoIndex = 0;
-	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
-	{
-		xml_node *Node = Root->Children[ChildIndex];
-		Assert(StringsAreSame(Node->Tag, "animation"));
-
-		string JointName = NodeAttributeValueGet(Node, "name");
-		AnimationInfo->JointNames[AnimationInfoIndex] = JointName;
-
-		//
-		// NOTE(Justin): I have only made the observation that the second to
-		// last node in an animation node is the sampler node. I do not have a
-		// complete understanding of the Collada spec to say with certainty that
-		// THIS IS ALWAYS TRUE.
-		//
-
-		xml_node Sampler = *Node->Children[Node->ChildrenCount - 2];
-		xml_node Input = *Sampler.Children[0];
-		xml_node Output = *Sampler.Children[1];
-
-		string InputSrcName = NodeAttributeValueGet(&Input, "source");
-		string OutputSrcName = NodeAttributeValueGet(&Output, "source");
-
-		InputSrcName.Data++;
-		OutputSrcName.Data++;
-
-		InputSrcName.Size--;
-		OutputSrcName.Size--;
-
-		xml_node N = {};
-		NodeGet(Node, &N, "source", (char *)InputSrcName.Data);
-		N = *N.Children[0];
-
-		string Count = NodeAttributeValueGet(&N, "count");
-		u32 TimeCount = U32FromASCII(Count.Data);
-
-		if(ChildIndex == 0)
-		{
-			AnimationInfo->TimeCount = TimeCount;
-			AnimationInfo->TransformCount = TimeCount;
-		}
-		else
-		{
-			Assert(AnimationInfo->TimeCount == TimeCount);
-			Assert(AnimationInfo->TransformCount == TimeCount);
-		}
-
-		AnimationInfo->Times[AnimationInfoIndex] = PushArray(Arena, TimeCount, f32);
-		ParseF32Array(AnimationInfo->Times[AnimationInfoIndex], TimeCount, N.InnerText);
-
-		N = {};
-		NodeGet(Node, &N, "source", (char *)OutputSrcName.Data);
-		N = *N.Children[0];
-
-		AnimationInfo->Transforms[AnimationInfoIndex] = PushArray(Arena, TimeCount * 16, mat4);
-		ParseF32Array((f32 *)AnimationInfo->Transforms[AnimationInfoIndex], TimeCount * 16, N.InnerText);
-
-		AnimationInfoIndex++;
-	}
-}
-#endif
 
 internal void
 JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount, joint *Joints, u32 *JointIndex)
@@ -130,121 +65,6 @@ JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCoun
 		}
 	}
 }
-
-internal void
-FileWriteHeader(FILE *OutputFile, char *HeaderName, string HeaderData)
-{
-	fputs(HeaderName, OutputFile);
-	fputs(" ", OutputFile);
-	fputs((char *)HeaderData.Data, OutputFile);
-	fputs("\n", OutputFile);
-}
-
-internal void
-FileWriteHeader(FILE *OutputFile, char *HeaderName, char *HeaderData)
-{
-	fputs(HeaderName, OutputFile);
-	fputs(" ", OutputFile);
-	fputs(HeaderData, OutputFile);
-	fputs("\n", OutputFile);
-}
-
-internal void
-FileWriteStringArrayWithSpaces(FILE *OutputFile, string *Str, u32 Count, u32 LineBreakCount = 0, char *Tag = "")
-{
-	u32 PutCount = 0;
-	for(u32 Index = 0; Index < Count; ++Index)
-	{
-		if(PutCount == 0)
-		{
-			fputs(Tag, OutputFile);
-			fputs(" ", OutputFile);
-		}
-
-		char *Cstr = (char *)Str[Index].Data;
-		fputs(Cstr, OutputFile);
-		fputs(" ", OutputFile);
-
-		PutCount++;
-		if(PutCount == LineBreakCount)
-		{
-			fputs("\n", OutputFile);
-			PutCount = 0;
-		}
-	}
-	fputs("\n", OutputFile);
-}
-
-internal void
-FileWriteStringArrayWithNewLines(FILE *OutputFile, string *Str, u32 Count, u32 NewLineStride)
-{
-	u32 StrideCount = 0;
-	for(u32 Index = 0; Index < Count; ++Index)
-	{
-		char *Cstr = (char *)Str[Index].Data;
-		fputs(Cstr, OutputFile);
-		if(StrideCount < NewLineStride - 1)
-		{
-			fputs(" ", OutputFile);
-			StrideCount++;
-		}
-		else
-		{
-			fputs("\n", OutputFile);
-			StrideCount = 0;
-		}
-	}
-	fputs("\n", OutputFile);
-}
-
-internal void
-FileWriteJoints(FILE *OutputFile, memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCount)
-{
-	for(s32 ChildIndex = 0; ChildIndex < Root->ChildrenCount; ++ChildIndex)
-	{
-		xml_node *Node = Root->Children[ChildIndex];
-		Assert(Node);
-		if(StringsAreSame(Node->Tag, "node"))
-		{
-			string SID = NodeAttributeValueGet(Node, "sid");
-			s32 Index = JointIndexGet(JointNames, JointCount, SID);
-			if(Index != -1)
-			{
-				string ParentSID = NodeAttributeValueGet(Node->Parent, "sid");
-
-				fputs("joint_name ", OutputFile);
-				fputs((char *)SID.Data, OutputFile);
-				fputs("\n", OutputFile);
-
-				s32 ParentIndex = JointIndexGet(JointNames, JointCount, ParentSID);
-				Assert(ParentIndex != - 1);
-
-				string StrParentIndex = DigitToString(Arena, ParentIndex);
-				fputs("parent_index ", OutputFile);
-				fputs((char *)StrParentIndex.Data, OutputFile);
-				fputs("\n", OutputFile);
-
-				xml_node *Child = Node->Children[0];
-				if(StringsAreSame(Child->Tag, "matrix"))
-				{
-
-					string StrTransform = Child->InnerText;
-					fputs("xform_joint ", OutputFile);
-					fputs((char *)StrTransform.Data, OutputFile);
-					fputs("\n", OutputFile);
-				}
-			}
-		}
-
-		if(*Node->Children)
-		{
-			FileWriteJoints(OutputFile, Arena, Node, JointNames, JointCount);
-		}
-	}
-}
-
-
-
 
 internal animation_info 
 AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
@@ -600,15 +420,24 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		Assert(Model.MeshCount == (u32)LibControllers.ChildrenCount);
 		xml_node Controller = {};
 		Controller = *LibControllers.Children[MeshIndex];
+		// TODO(Justin): Move this to an appropriate position.
+		u32 JointCount = 0;
+		string *JointNames;
 		if(Controller.ChildrenCount != 0)
 		{
 			xml_node BindShape = {};
 			NodeGet(&Controller, &BindShape, "bind_shape_matrix");
 
 			ParseF32Array(&Mesh.BindTransform.E[0][0], 16, BindShape.InnerText);
-			ParseColladaStringArray(Arena, &Controller, &Mesh.JointNames, &Mesh.JointCount);
 
-			Assert(Mesh.JointNames);
+
+			//string *JointNames = PushArray(Arena, Mesh.JointCount, string);
+			//ParseColladaStringArray(Arena, &Controller, &Mesh.JointNames, &Mesh.JointCount);
+			ParseColladaStringArray(Arena, &Controller, &JointNames, &JointCount);
+
+			Mesh.JointCount = JointCount;
+
+			Assert(JointNames);
 			Assert(Mesh.JointCount != 0);
 
 			Mesh.JointTransforms = PushArray(Arena, Mesh.JointCount, mat4);
@@ -751,36 +580,17 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			if(JointRoot.ChildrenCount != 0)
 			{
 				joint *Joints = Mesh.Joints;
-				Joints->Name = Mesh.JointNames[0];
+				Joints->Name = JointNames[0];
 				Joints->ParentIndex = -1;
 				ParseF32Array(Arena, &Joints->Transform.E[0][0], 16, JointRoot.Children[0]->InnerText);
 
 				u32 JointIndex = 1;
-				JointsGet(Arena, &JointRoot, Mesh.JointNames, Mesh.JointCount, Joints, &JointIndex);
+				JointsGet(Arena, &JointRoot, JointNames, Mesh.JointCount, Joints, &JointIndex);
 			}
 		}
 
 		Model.Meshes[MeshIndex] = Mesh;
 	}
-
-#if 0
-	//
-	// NOTE(Justin): Animations
-	//
-	
-	xml_node LibAnimations = {};
-	NodeGet(Root, &LibAnimations, "library_animations");
-	if(LibAnimations.ChildrenCount != 0)
-	{
-		Model.AnimationsInfo.JointCount = LibAnimations.ChildrenCount;
-		Model.AnimationsInfo.JointNames = PushArray(Arena, Model.AnimationsInfo.JointCount, string); 
-		Model.AnimationsInfo.Times = PushArray(Arena, Model.AnimationsInfo.JointCount, f32 *);
-		Model.AnimationsInfo.Transforms = PushArray(Arena, Model.AnimationsInfo.JointCount, mat4 *);
-
-		AnimationInfoGet(Arena, &LibAnimations, &Model.AnimationsInfo);
-	}
-#endif
-
 
 	//
 	// NOTE(Justin): Pre-multiply bind transform with each joints inverse bind
@@ -805,53 +615,3 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 	return(Model);
 }
-
-internal void
-FileWriteArray(FILE *Out, f32 *A, u32 Count)
-{
-	char Buff[4096];
-	u32 Index;
-	size_t At = 0;
-	for(Index = 0; Index < Count; ++Index)
-	{
-		sprintf(Buff, "%f", A[Index]);
-		At = strlen(Buff);
-		Buff[At] = '\0';
-		fputs(Buff, Out);
-		fputs(" ", Out);
-	}
-}
-
-internal void
-FileWriteArray(FILE *Out, u32 *A, u32 Count)
-{
-	char Buff[4096];
-	u32 Index;
-	size_t At = 0;
-	for(Index = 0; Index < Count; ++Index)
-	{
-		sprintf(Buff, "%d", A[Index]);
-		At = strlen(Buff);
-		Buff[At] = '\0';
-		fputs(Buff, Out);
-		fputs(" ", Out);
-	}
-}
-
-internal void
-FileWriteArray(FILE *Out, s32 *A, u32 Count)
-{
-	char Buff[4096];
-	u32 Index;
-	size_t At = 0;
-	for(Index = 0; Index < Count; ++Index)
-	{
-		sprintf(Buff, "%d", A[Index]);
-		At = strlen(Buff);
-		Buff[At] = '\0';
-		fputs(Buff, Out);
-		fputs(" ", Out);
-	}
-}
-
-

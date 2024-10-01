@@ -255,7 +255,7 @@ int main(int Argc, char **Argv)
 				Models[1]->Animations.Count = 1;
 				Models[1]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
 				animation_info *YInfo = Models[1]->Animations.Info;
-				//ConvertAnimationFormat(Arena, "YBot_RunningJump.animation", "animations\\YBot_RunningJump.dae");
+				ConvertAnimationFormat(Arena, "YBot_RunningJump.animation", "animations\\YBot_RunningJump.dae");
 				*YInfo = AnimationLoad(Arena, "YBot_RunningJump.animation");
 				mat4 Scale = Mat4Scale(0.2f);
 
