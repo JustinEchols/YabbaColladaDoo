@@ -86,11 +86,6 @@ ConvertMeshFormat(memory_arena *Arena, char *OutputFileName, char *FileName)
 				JointInfo.ParentIndex = Joint->ParentIndex;
 				JointInfo.Transform = Joint->Transform;
 
-				//fwrite(&Joint->Name.Data, sizeof(u8), Joint->Name.Size, Out);
-				//fwrite(&Joint->Name.Size, sizeof(u64), 1, Out);
-				//fwrite(&Joint->ParentIndex, sizeof(s32), 1, Out);
-				//fwrite(&Joint->Transform, sizeof(mat4), 1, Out);
-
 				fwrite(&JointInfo.Name, sizeof(u8), ArrayCount(JointInfo.Name), Out);
 				fwrite(&JointInfo.ParentIndex, sizeof(s32), 1, Out);
 				fwrite(&JointInfo.Transform, sizeof(mat4), 1, Out);

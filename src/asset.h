@@ -73,7 +73,6 @@ struct asset
 		asset_animation_info AnimationInfo;
 	};
 };
-
 #pragma pack(pop)
 
 #define ASSET_COUNT 256
