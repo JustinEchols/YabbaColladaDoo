@@ -703,6 +703,8 @@ Quaternion(v3 Axis, f32 Angle)
 	Result.y = sinf(0.5f * Angle) * Axis.y;
 	Result.z = sinf(0.5f * Angle) * Axis.z;
 	Result.w = cosf(0.5f * Angle);
+
+	return(Result);
 }
 
 inline quaternion

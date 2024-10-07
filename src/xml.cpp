@@ -391,4 +391,3 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 
 	return(Result);
 }
-

@@ -1,17 +1,19 @@
 
 /*
  TODO(Justin):
+ [] Better opengl error logging/checking!  
  [] File paths from build directory
- [] Remove GLFW
- [] Simple animation file format 
- [] Test different models.
- [] Instead of storing mat4's for animation, store pos, quat, scale and construct for both key frame and model
+ [] Load collada file with multiple texture files 
+ [X] Simple animation file format 
+ [*] Test different models.
+ [X] Instead of storing mat4's for animation, store pos, quat, scale and construct for both key frame and model
+ [X] Check UV mapping 
+ [] Phong lighting 
  [] Different model loading based on whether or not a normal map is available...
  [] Diffuse, ambient, specular, and normal textures in file format 
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [] Remove strtok_s
- [] Mesh initialization
- [] Use temporary memory when initializing mesh
+ [?] Use temporary memory when initializing mesh
  [] -f command line option to read in a list of files from a txt file and do the conversion on multiple dae files
 */
 
@@ -25,28 +27,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-
-#define internal static
-#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
-#define ArrayCount(A) sizeof(A) / sizeof((A)[0])
-#define Kilobyte(Count) (1024 * Count)
-#define Megabyte(Count) (1024 * Kilobyte(Count))
-
-#define PI32 3.1415926535897f
-#define DegreeToRad(Degrees) ((Degrees) * (PI32 / 180.0f))
-
-#define COLLADA_ATTRIBUTE_MAX_COUNT 10
-#define COLLADA_NODE_CHILDREN_MAX_COUNT 75
-
-#define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
-#define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
-#define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
-
-#define SLLQueuePush_N(First,Last,Node,Next) (((First)==0?\
-(First)=(Last)=(Node):\
-((Last)->Next=(Node),(Last)=(Node))),\
-(Node)->Next=0)
-#define SLLQueuePush(First,Last,Node) SLLQueuePush_N(First,Last,Node,Next)
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -62,7 +42,31 @@ typedef s32 b32;
 typedef float f32;
 typedef size_t memory_index;
 
-#include "memory.h"
+typedef uintptr_t umm;
+
+#define internal static
+#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
+#define ArrayCount(A) sizeof(A) / sizeof((A)[0])
+#define Kilobyte(Count) (1024 * Count)
+#define Megabyte(Count) (1024 * Kilobyte(Count))
+
+#define PI32 3.1415926535897f
+#define DegreeToRad(Degrees) ((Degrees) * (PI32 / 180.0f))
+
+#define COLLADA_ATTRIBUTE_MAX_COUNT 10
+#define COLLADA_NODE_CHILDREN_MAX_COUNT 85
+
+#define PushArray(Arena, Count, Type) (Type *)PushSize_(Arena, Count * sizeof(Type))
+#define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
+#define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
+
+#define SLLQueuePush_N(First,Last,Node,Next) (((First)==0?\
+(First)=(Last)=(Node):\
+((Last)->Next=(Node),(Last)=(Node))),\
+(Node)->Next=0)
+#define SLLQueuePush(First,Last,Node) SLLQueuePush_N(First,Last,Node,Next)
+
+#define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
 
 inline u32
 ArraySum(u32 *A, u32 Count)
@@ -75,26 +79,65 @@ ArraySum(u32 *A, u32 Count)
 	return(Result);
 }
 
-#include "strings.h"
-#include "strings.cpp"
-#include "file_io.cpp"
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include "memory.h"
 #include "math_util.h"
+#include "strings.h"
 #include "xml.h"
-#include "xml.cpp"
 #include "animation.h"
 #include "mesh.h"
+#include "asset.h"
+#include "entity.h"
+#include "strings.cpp"
+#include "file_io.cpp"
+#include "xml.cpp"
 #include "mesh.cpp"
 #include "animation.cpp"
-#include "asset.h"
 #include "asset.cpp"
+
+struct game_state
+{
+	u32 EntityCount;
+	entity Entities[256];
+
+	model XBot;
+	model Vampire;
+	model Light;
+
+	texture Textures[16];
+};
+
+#include "entity.cpp"
 
 #if RENDER_TEST
 #include "opengl.cpp"
 #include "shaders.h"
+
+internal shader 
+ShaderLoad(char *FileNameVS, char *FileNameFS)
+{
+	shader Result = {};
+
+	FILE *FileVS = fopen(FileNameVS, "r");
+	FILE *FileFS = fopen(FileNameFS, "r");
+	if(FileVS && FileFS)
+	{
+		s32 SizeVS = FileSizeGet(FileVS);
+		s32 SizeFS = FileSizeGet(FileFS);
+		Assert(SizeVS <= ArrayCount(Result.VS));
+		Assert(SizeFS <= ArrayCount(Result.FS));
+
+		FileReadEntireAndNullTerminate((u8 *)Result.VS, SizeVS, FileVS);
+		FileReadEntireAndNullTerminate((u8 *)Result.FS, SizeFS, FileFS);
+
+		fclose(FileVS);
+		fclose(FileFS);
+	}
+
+	return(Result);
+}
 
 int main(int Argc, char **Argv)
 {
@@ -142,90 +185,53 @@ int main(int Argc, char **Argv)
 
 				glEnable(GL_DEBUG_OUTPUT);
 				glDebugMessageCallback(GLDebugCallback, 0);
-
 				glEnable(GL_DEPTH_TEST);
 				glDepthFunc(GL_LESS);
-
 				glFrontFace(GL_CCW);
 				glEnable(GL_CULL_FACE);
 				glCullFace(GL_BACK);
-
 				glEnable(GL_MULTISAMPLE);
 				glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
 				glEnable(GL_SAMPLE_ALPHA_TO_ONE);
 				glEnable(GL_BLEND);
 
-				stbi_set_flip_vertically_on_load(true);
+				//
+				// NOTE(Justin): Assets
+				//
 
-				texture Textures[3] = {};
+				stbi_set_flip_vertically_on_load(true);
 				char *TextureFiles[] =
 				{
-					"..\\data\\textures\\white_with_border.bmp",
-					"..\\data\\textures\\red.bmp",
+					"textures\\checkerboard.jpg",
+					"textures\\awesomeface.png",
+					"textures\\brickwall.jpg",
+					"textures\\brickwall_normal.jpg",
+					"textures\\Vampire_diffuse.png",
+					"textures\\Vampire_diffuse_transparent.png",
+					"textures\\Vampire_emission.png",
+					"textures\\Vampire_normal.png",
+					"textures\\Vampire_specular.png"
+					"textures\\white.bmp"
 				};
-
-				for(u32 TextureIndex = 0; TextureIndex < ArrayCount(TextureFiles); ++TextureIndex)
+				char *ShaderFiles[] =
 				{
-					OpenGLAllocateTexture(TextureFiles[TextureIndex], &Textures[TextureIndex]);
-				}
-
-				//
-				// NOTE(Justin): Model info
-				//
-
-
-				char *ModelSourceFiles[] = 
-				{
-					"models\\XBot.dae",
-					"models\\YBot.dae",
+					"shaders\\main.vs",
+					"shaders\\main.fs",
+					"shaders\\basic.vs",
+					"shaders\\basic.fs",
 				};
-				char *ModelDestFiles[] = 
+				char *ModelFiles[] = 
 				{
 					"XBot.mesh",
-					"YBot.mesh",
+					"Sphere.mesh",
+					"VampireALusth.mesh",
 				};
-
-				model *Models[3] = {};
-				for(u32 FileIndex = 0; FileIndex < ArrayCount(ModelDestFiles); ++FileIndex)
-				{
-					Models[FileIndex] = PushStruct(Arena, model);
-					ConvertMeshFormat(Arena, ModelDestFiles[FileIndex], ModelSourceFiles[FileIndex]);
-					*Models[FileIndex] = ModelLoad(Arena, ModelDestFiles[FileIndex]);
-				}
-
-				//
-				// NOTE(Justin): Animation info
-				//
-
-				char *AnimSourceFiles[] =
-				{
-					"animations\\XBot_ActionIdle.dae",
-					"animations\\XBot_ActionIdleToStandingIdle.dae",
-					"animations\\XBot_FemaleWalk.dae",
-					"animations\\XBot_IdleLookAround.dae",
-					//"animations\\XBot_IdleShiftWeight.dae",
-					"animations\\XBot_IdleToSprint.dae",
-					"animations\\XBot_LeftTurn.dae",
-					"animations\\XBot_Pushing.dae",
-					"animations\\XBot_PushingStart.dae",
-					"animations\\XBot_PushingStop.dae",
-					"animations\\XBot_RightTurn.dae",
-					"animations\\XBot_RunToStop.dae",
-					"animations\\XBot_Running.dae",
-					"animations\\XBot_Running180.dae",
-					"animations\\XBot_RunningChangeDirection.dae",
-					"animations\\XBot_RunningToTurn.dae",
-					"animations\\XBot_Walking.dae",
-					"animations\\XBot_WalkingTurn180.dae"
-				};
-
-				char *AnimDestFiles[] =
+				char *XBotAnimDestFiles[] =
 				{
 					"XBot_ActionIdle.animation",
 					"XBot_ActionIdleToStandingIdle.animation",
 					"XBot_FemaleWalk.animation",
 					"XBot_IdleLookAround.animation",
-					//"XBot_IdleShiftWeight.animation",
 					"XBot_IdleToSprint.animation",
 					"XBot_LeftTurn.animation",
 					"XBot_Pushing.animation",
@@ -240,94 +246,91 @@ int main(int Argc, char **Argv)
 					"XBot_Walking.animation",
 					"XBot_WalkingTurn180.animation"
 				};
-
-				Models[0]->Basis.O = V3(100.0f, -80.0f, -400.0f);
-				Models[0]->Basis.X = XAxis();
-				Models[0]->Basis.Y = YAxis();
-				Models[0]->Basis.Z = ZAxis();
-				Models[0]->Animations.Count = ArrayCount(AnimDestFiles);
-				Models[0]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
-
-				Models[1]->Basis.O = V3(-100.0f, -80.0f, -500.0f);
-				Models[1]->Basis.X = XAxis();
-				Models[1]->Basis.Y = YAxis();
-				Models[1]->Basis.Z = ZAxis();
-				Models[1]->Animations.Count = 1;
-				Models[1]->Animations.Info = PushArray(Arena, Models[0]->Animations.Count, animation_info);
-				animation_info *YInfo = Models[1]->Animations.Info;
-				ConvertAnimationFormat(Arena, "YBot_RunningJump.animation", "animations\\YBot_RunningJump.dae");
-				*YInfo = AnimationLoad(Arena, "YBot_RunningJump.animation");
-				mat4 Scale = Mat4Scale(0.2f);
-
-				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(AnimDestFiles); ++AnimIndex)
+				char *VampireAnimDestFiles[] =
 				{
-#if 0
-					char *Source = AnimSourceFiles[AnimIndex];
-					char *Dest = AnimDestFiles[AnimIndex];
+					"Vampire_Bite.animation",
+					"Vampire_Walking.animation",
+				};
 
-					ConvertAnimationFormat(Arena, Dest, Source);
-					animation_info TestAnimation = AnimationLoad(Arena, Dest);
-#else
-					char *Dest = AnimDestFiles[AnimIndex];
-					animation_info TestAnimation = AnimationLoad(Arena, Dest);
-#endif
 
-					animation_info *Info = Models[0]->Animations.Info + AnimIndex;
+				game_state GameState_ = {};
+				game_state *GameState = &GameState_;
+
+				texture *Texture = (texture *)GameState->Textures;
+				for(u32 TextureIndex = 0; TextureIndex < ArrayCount(TextureFiles); ++TextureIndex)
+				{
+					*Texture = TextureLoad(TextureFiles[TextureIndex]);
+					OpenGLAllocateTexture(Texture);
+					Texture++;
+				}
+
+				shader Shaders[2];
+				for(u32 ShaderIndex = 0; ShaderIndex < ArrayCount(Shaders); ++ShaderIndex)
+				{
+					Shaders[ShaderIndex] = ShaderLoad(ShaderFiles[2 * ShaderIndex], ShaderFiles[2 * ShaderIndex + 1]);
+					Shaders[ShaderIndex].Handle = GLProgramCreate(Shaders[ShaderIndex].VS, Shaders[ShaderIndex].FS);
+				}
+
+				GameState->XBot = ModelLoad(Arena, "XBot.mesh");
+				model *XBot = &GameState->XBot;
+				XBot->Animations.Count = ArrayCount(XBotAnimDestFiles);
+				XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
+				XBot->Meshes[0].DiffuseTexture = GameState->Textures[0].Handle;
+				XBot->Meshes[1].DiffuseTexture = GameState->Textures[0].Handle;
+				XBot->Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
+				XBot->Meshes[1].MaterialFlags = MaterialFlag_Diffuse;
+
+				GameState->Light = ModelLoad(Arena, "Sphere.mesh");
+				model *Light = &GameState->Light;
+				Light->Meshes[0].DiffuseTexture = GameState->Textures[0].Handle;
+
+				GameState->Vampire = ModelLoad(Arena, "VampireALusth.mesh");
+				model *Vampire = &GameState->Vampire;
+				Vampire->Animations.Count = ArrayCount(VampireAnimDestFiles);
+				Vampire->Animations.Info = PushArray(Arena, Vampire->Animations.Count, animation_info);
+				Vampire->Meshes[0].DiffuseTexture = GameState->Textures[4].Handle;
+				Vampire->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular);
+
+				for(u32 XBotAnimIndex = 0; XBotAnimIndex < ArrayCount(XBotAnimDestFiles); ++XBotAnimIndex)
+				{
+					char *Dest = XBotAnimDestFiles[XBotAnimIndex];
+					animation_info TestAnimation = AnimationLoad(Arena, Dest);
+					animation_info *Info = XBot->Animations.Info + XBotAnimIndex;
 					*Info = TestAnimation;
 				}
 
-				//
-				// NOTE(Justin): Opengl shader initialization
-				//
-
-				u32 Shaders[2];
-				Shaders[0] = GLProgramCreate(BasicVsSrc, BasicFsSrc);
-				Shaders[1] = GLProgramCreate(CubeVS, CubeFS);
-
-				for(u32 ModelIndex = 0; ModelIndex < ArrayCount(Models); ++ModelIndex)
+				for(u32 VampAnimIndex = 0; VampAnimIndex < ArrayCount(VampireAnimDestFiles); ++VampAnimIndex)
 				{
-					model *Model = Models[ModelIndex];
-					if(Model)
-					{
-						if(Model->HasSkeleton)
-						{
-							OpenGLAllocateAnimatedModel(Models[ModelIndex], Shaders[0]);
-							glUseProgram(Shaders[0]);
-							UniformMatrixSet(Shaders[0], "View", CameraTransform);
-							UniformMatrixSet(Shaders[0], "Projection", PerspectiveTransform);
-							UniformV3Set(Shaders[0], "CameraP", CameraP);
-
-						}
-						else
-						{
-							OpenGLAllocateModel(Models[ModelIndex], Shaders[1]);
-							glUseProgram(Shaders[1]);
-							UniformMatrixSet(Shaders[1], "View", CameraTransform);
-							UniformMatrixSet(Shaders[1], "Projection", PerspectiveTransform);
-						}
-					}
+					char *Dest = VampireAnimDestFiles[VampAnimIndex];
+					animation_info TestAnimation = AnimationLoad(Arena, Dest);
+					animation_info *Info = Vampire->Animations.Info + VampAnimIndex;
+					*Info = TestAnimation;
 				}
 
-				glfwSetTime(0.0);
+				OpenGLAllocateAnimatedModel(XBot, Shaders[0].Handle);
+				OpenGLAllocateAnimatedModel(Vampire, Shaders[0].Handle);
+				OpenGLAllocateModel(Light, Shaders[1].Handle);
+
+				PlayerAdd(GameState);
+				VampireAdd(GameState);
+				LightAdd(GameState);
+
 				f32 StartTime = 0.0f;
 				f32 EndTime = 0.0f;
 				f32 DtForFrame = 0.0f;
 				f32 Angle = 0.0f;
+				glfwSetTime(0.0);
+
+				glUseProgram(Shaders[0].Handle);
+				UniformMatrixSet(Shaders[0].Handle, "View", CameraTransform);
+				UniformMatrixSet(Shaders[0].Handle, "Projection", PerspectiveTransform);
+
+				glUseProgram(Shaders[1].Handle);
+				UniformMatrixSet(Shaders[1].Handle, "View", CameraTransform);
+				UniformMatrixSet(Shaders[1].Handle, "Projection", PerspectiveTransform);
 
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
-					for(u32 ModelIndex = 0; ModelIndex < ArrayCount(Models); ++ModelIndex)
-					{
-						model *Model = Models[ModelIndex];
-						if(Model)
-						{
-							if(Model->HasSkeleton)
-							{
-								AnimationUpdate(Model, DtForFrame);
-							}
-						}
-					}
-
 					//
 					// NOTE(Justin): Render.
 					//
@@ -335,27 +338,31 @@ int main(int Argc, char **Argv)
 					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-					//Angle += DtForFrame;
-					v3 LightDir = V3(0.0f, 0.0f, 1.0f);
-					for(u32 ModelIndex = 0; ModelIndex < ArrayCount(Models); ++ModelIndex)
+					for(u32 EntityIndex = 0; EntityIndex < GameState->EntityCount; ++EntityIndex)
 					{
-						model *Model = Models[ModelIndex];
-						if(Model)
+						entity *Entity = GameState->Entities + EntityIndex;
+						switch(Entity->Type)
 						{
-							if(Model->HasSkeleton)
+							case EntityType_Player:
 							{
-								glUseProgram(Shaders[0]);
-								UniformV3Set(Shaders[0], "LightDir", LightDir);
-								OpenGLDrawAnimatedModel(Models[ModelIndex], Shaders[0]);
-							}
-							else
+								mat4 Transform = EntityTransform(Entity);
+								AnimationUpdate(XBot, DtForFrame);
+								OpenGLDrawAnimatedModel(XBot, Shaders[0].Handle, Transform);
+							} break;
+							case EntityType_Vampire:
 							{
-								glUseProgram(Shaders[1]);
-								f32 A = 20.0f * Angle;
-								mat4 R = Mat4YRotation(DegreeToRad(A));
-								UniformMatrixSet(Shaders[1], "Model", Mat4Translate(Models[ModelIndex]->Basis.O) * R * Scale);
-								OpenGLDrawModel(Models[ModelIndex], Shaders[1]);
-							}
+								mat4 Transform = EntityTransform(Entity);
+								AnimationUpdate(Vampire, DtForFrame);
+								OpenGLDrawAnimatedModel(Vampire, Shaders[0].Handle, Transform);
+							} break;
+							case EntityType_Light:
+							{
+								mat4 Transform = EntityTransform(Entity);
+								Angle += 20.0f * DtForFrame;
+								mat4 R = Mat4YRotation(DegreeToRad(Angle));
+								mat4 Scale = Mat4Scale(10.0f);
+								OpenGLDrawModel(Light, Shaders[1].Handle, Transform);
+							} break;
 						}
 					}
 

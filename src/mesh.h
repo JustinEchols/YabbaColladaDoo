@@ -34,6 +34,14 @@ struct material_spec
 	f32 Shininess;
 };
 
+enum material_flags
+{
+	MaterialFlag_Ambient = (1 << 1),
+	MaterialFlag_Diffuse = (1 << 2),
+	MaterialFlag_Specular = (1 << 3),
+	MaterialFlag_Normal = (1 << 4),
+};
+
 struct mesh
 {
 	string Name;
@@ -53,13 +61,17 @@ struct mesh
 	mat4 *ModelSpaceTransforms;
 
 	material_spec MaterialSpec;
+	u32 MaterialFlags;
 
-	u32 TextureHandle;
+	u32 AmbientTexture;
+	u32 DiffuseTexture;
+	u32 SpecularTexture;
+	u32 NormalTexture;
 };
 
 struct model
 {
-	basis Basis;
+	//basis Basis;
 
 	b32 HasSkeleton;
 

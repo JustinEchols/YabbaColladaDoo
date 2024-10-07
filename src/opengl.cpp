@@ -89,12 +89,19 @@ GLProgramCreate(char *VS, char *FS)
 	return(Result);
 }
 
-
+internal void
+UniformBoolSet(u32 ShaderProgram, char *UniformName, b32 B32)
+{
+	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
+	glUniform1i(UniformLocation, B32);
+}
 
 internal void
 UniformU32Set(u32 ShaderProgram, char *UniformName, u32 U32)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
 	glUniform1ui(UniformLocation, U32);
 }
 
@@ -102,6 +109,7 @@ internal void
 UniformF32Set(u32 ShaderProgram, char *UniformName, f32 F32)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
 	glUniform1f(UniformLocation, F32);
 }
 
@@ -109,12 +117,14 @@ internal void
 UniformV3Set(u32 ShaderProgram, char *UniformName, v3 V)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
 	glUniform3fv(UniformLocation, 1, &V.E[0]);
 }
 internal void
 UniformV4Set(u32 ShaderProgram, char *UniformName, v4 V)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
 	glUniform4fv(UniformLocation, 1, &V.E[0]);
 }
 
@@ -122,6 +132,7 @@ internal void
 UniformMatrixArraySet(u32 ShaderProgram, char *UniformName, mat4 *M, u32 Count)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
 	glUniformMatrix4fv(UniformLocation, Count, GL_TRUE, &M[0].E[0][0]);
 }
 
@@ -129,16 +140,15 @@ internal void
 UniformMatrixSet(u32 ShaderProgram, char *UniformName, mat4 M)
 {
 	s32 UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+	Assert(UniformLocation != -1);
 	glUniformMatrix4fv(UniformLocation, 1, GL_TRUE, &M.E[0][0]);
 }
 
 internal void
-OpenGLAllocateTexture(char *FileName, texture *Texture)
+OpenGLAllocateTexture(texture *Texture)
 {
-	Texture->Memory = stbi_load(FileName, &Texture->Width, &Texture->Height, &Texture->ChannelCount, 4);
 	if(Texture->Memory)
 	{
-
 		glGenTextures(1, &Texture->Handle);
 		glBindTexture(GL_TEXTURE_2D, Texture->Handle);
 
@@ -149,14 +159,15 @@ OpenGLAllocateTexture(char *FileName, texture *Texture)
 
 		glTexImage2D(GL_TEXTURE_2D,
 					0,
-					GL_RGBA8,
+					Texture->Format,
 					Texture->Width,
 					Texture->Height,
 					0, 
-					GL_RGBA,
+					Texture->Format,
 					GL_UNSIGNED_BYTE, 
 					Texture->Memory);
 
+		glGenerateMipmap(GL_TEXTURE_2D);
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 }
@@ -178,18 +189,20 @@ OpenGLAllocateAnimatedModel(model *Model, u32 ShaderProgram)
 		glBufferData(GL_ARRAY_BUFFER, Mesh->VertexCount * sizeof(vertex), Mesh->Vertices, GL_STATIC_DRAW);
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(3 * sizeof(f32)));
-		glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(vertex), (void *)(8 * sizeof(f32)));
-		glVertexAttribIPointer(3, 3, GL_UNSIGNED_INT, sizeof(vertex), (void *)(9 * sizeof(u32)));
-		glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(12 * sizeof(u32)));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, N));
+		glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(vertex), (void *)OffsetOf(vertex, UV));
+		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, sizeof(vertex), (void *)OffsetOf(vertex, JointInfo));
+		glVertexAttribIPointer(4, 3, GL_UNSIGNED_INT, sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, JointIndex)));
+		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, Weights)));
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
 		glEnableVertexAttribArray(2);
 		glEnableVertexAttribArray(3);
 		glEnableVertexAttribArray(4);
+		glEnableVertexAttribArray(5);
 
-		ExpectedAttributeCount = 5;
+		ExpectedAttributeCount = 6;
 
 		GLIBOInit(&Model->IBO[MeshIndex], Mesh->Indices, Mesh->IndicesCount);
 		glBindVertexArray(0);
@@ -227,8 +240,8 @@ OpenGLAllocateModel(model *Model, u32 ShaderProgram)
 		glBufferData(GL_ARRAY_BUFFER, Mesh->VertexCount * sizeof(vertex), Mesh->Vertices, GL_STATIC_DRAW);
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(3 * sizeof(f32)));
-		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(6 * sizeof(f32)));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, N));
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, UV));
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -256,30 +269,59 @@ OpenGLAllocateModel(model *Model, u32 ShaderProgram)
 }
 
 internal void
-OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram)
+OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 {
-	mat4 M = Mat4Translate(Model->Basis.O) * Mat4(Model->Basis.X, Model->Basis.Y, Model->Basis.Z);
+	//mat4 M = Mat4Translate(Model->Basis.O) * Mat4(Model->Basis.X, Model->Basis.Y, Model->Basis.Z);
+
+	v3 LightDir = V3(0.0f, 0.0f, 1.0f);
+
+	glUseProgram(ShaderProgram);
+	//UniformV3Set(ShaderProgram, "LightDir", LightDir);
+	UniformBoolSet(ShaderProgram, "Texture", 0);
 	UniformMatrixSet(ShaderProgram, "Model", M);
 	for(u32 MeshIndex = 0; MeshIndex < Model->MeshCount; ++MeshIndex)
 	{
 		mesh *Mesh = Model->Meshes + MeshIndex;
-		glBindVertexArray(Model->VA[MeshIndex]);
-		UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
-		UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
-		UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
-		UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
-		glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
-		glBindVertexArray(0);
+		if(FlagIsSet(Mesh, MaterialFlag_Diffuse))
+		{
+			UniformBoolSet(ShaderProgram, "UsingTexture", true);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, Mesh->DiffuseTexture);
+			glBindVertexArray(Model->VA[MeshIndex]);
+			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
+			//UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
+			//UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
+			//UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
+			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+		else
+		{
+			UniformBoolSet(ShaderProgram, "UsingTexture", false);
+			glBindVertexArray(Model->VA[MeshIndex]);
+			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
+			UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
+			//UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
+			//UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
+			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
+		}
 	}
 }
 
 internal void
-OpenGLDrawModel(model *Model, u32 ShaderProgram)
+OpenGLDrawModel(model *Model, u32 ShaderProgram, mat4 Transform)
 {
+	//mat4 Transform = Mat4Translate(Model->Basis.O) * R * Scale;
+	glUseProgram(ShaderProgram);
+	UniformBoolSet(ShaderProgram, "Texture", 0);
+	UniformMatrixSet(ShaderProgram, "Model", Transform);
 	for(u32 MeshIndex = 0; MeshIndex < Model->MeshCount; ++MeshIndex)
 	{
 		mesh *Mesh = Model->Meshes + MeshIndex;
-		glBindTexture(GL_TEXTURE_2D, Mesh->TextureHandle);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, Mesh->DiffuseTexture);
 		glBindVertexArray(Model->VA[MeshIndex]);
 		glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);

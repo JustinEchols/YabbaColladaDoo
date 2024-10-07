@@ -65,6 +65,7 @@ struct asset_animation_header
 	u64 OffsetToAnimationInfo;
 };
 
+// NOTE(Justin): Below is information used to do the asset conversion.
 struct asset
 {
 	union
@@ -82,5 +83,39 @@ struct asset_manager
 	asset Assets[ASSET_COUNT];
 };
 
+#if 0
+char *ModelSourceFiles[] = 
+{
+	"models\\XBot.dae",
+	"models\\Sphere.dae",
+	"models\\VampireALusth.dae",
+};
+char *XBotAnimSourceFiles[] =
+{
+	"animations\\XBot_ActionIdle.dae",
+	"animations\\XBot_ActionIdleToStandingIdle.dae",
+	"animations\\XBot_FemaleWalk.dae",
+	"animations\\XBot_IdleLookAround.dae",
+	//"animations\\XBot_IdleShiftWeight.dae",
+	"animations\\XBot_IdleToSprint.dae",
+	"animations\\XBot_LeftTurn.dae",
+	"animations\\XBot_Pushing.dae",
+	"animations\\XBot_PushingStart.dae",
+	"animations\\XBot_PushingStop.dae",
+	"animations\\XBot_RightTurn.dae",
+	"animations\\XBot_RunToStop.dae",
+	"animations\\XBot_Running.dae",
+	"animations\\XBot_Running180.dae",
+	"animations\\XBot_RunningChangeDirection.dae",
+	"animations\\XBot_RunningToTurn.dae",
+	"animations\\XBot_Walking.dae",
+	"animations\\XBot_WalkingTurn180.dae"
+};
+char *VampireAnimSourceFiles [] =
+{
+	"animations\\Vampire_Bite.dae",
+	"animations\\Vampire_Walking.dae",
+};
+#endif
 #define ASSET_H
 #endif

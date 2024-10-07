@@ -10,6 +10,12 @@ struct key_frame
 	mat4 *Transforms;
 };
 
+// TODO(Justin): string hash for joint names
+// struct joint_name_hash
+// {
+//		string Name;
+//		s32 Index;
+// };
 struct animation_info
 {
 	u32 JointCount;

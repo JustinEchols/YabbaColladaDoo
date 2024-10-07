@@ -1,10 +1,13 @@
 
 struct texture
 {
+	char *FileName;
+	u32 Handle;
+	GLint InternalFormat;
+	GLenum Format;
 	int Width;
 	int Height;
 	int ChannelCount;
-	u32 Handle;
 	u8 *Memory;
 };
 
@@ -12,8 +15,45 @@ internal texture
 TextureLoad(char *FileName)
 {
 	texture Texture = {};
-	Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 4);
+
+	Texture.FileName = FileName;
+	Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 0);
+	if(Texture.Memory)
+	{
+		switch(Texture.ChannelCount)
+		{
+			case 1:
+			{
+				Texture.Format = GL_RED;
+			} break;
+			case 2:
+			{
+			} break;
+			case 3:
+			{
+				Texture.Format = GL_RGB;
+			} break;
+			case 4:
+			{
+				Texture.Format = GL_RGBA;
+			} break;
+			default:
+			{
+				Assert(0);
+			} break;
+		}
+	}
+
 	return(Texture);
+}
+
+internal void 
+TextureUnLoad(texture *Texture)
+{
+	if(Texture->Memory)
+	{
+		stbi_image_free(Texture->Memory);
+	}
 }
 
 internal void 
@@ -76,6 +116,7 @@ ConvertMeshFormat(memory_arena *Arena, char *OutputFileName, char *FileName)
 				fwrite(&V->JointInfo.Weights, sizeof(f32), 3, Out);
 			}
 
+			// TODO(Justin): Handle the case when a skeleton does not exist.
 			MeshInfo->OffsetToJoints = ftell(Out);
 			for(u32 JointIndex = 0; JointIndex < Mesh->JointCount; ++JointIndex)
 			{
