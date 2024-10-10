@@ -97,23 +97,25 @@ ArraySum(u32 *A, u32 Count)
 #include "animation.cpp"
 #include "asset.cpp"
 
+#if RENDER_TEST
+#include "opengl.cpp"
+#include "shaders.h"
+
 struct game_state
 {
 	u32 EntityCount;
 	entity Entities[256];
 
+	model Cube;
+	model Sphere;
 	model XBot;
 	model Vampire;
-	model Light;
+	model Paladin;
 
 	texture Textures[16];
 };
 
 #include "entity.cpp"
-
-#if RENDER_TEST
-#include "opengl.cpp"
-#include "shaders.h"
 
 internal shader 
 ShaderLoad(char *FileNameVS, char *FileNameFS)
@@ -183,6 +185,48 @@ int main(int Argc, char **Argv)
 				f32 ZFar = 100.0f;
 				mat4 PerspectiveTransform = Mat4Perspective(FOV, Aspect, ZNear, ZFar);
 
+				GLenum GLParams[] =
+				{
+					GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
+					GL_MAX_CUBE_MAP_TEXTURE_SIZE,
+					GL_MAX_DRAW_BUFFERS,
+					GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
+					GL_MAX_TEXTURE_IMAGE_UNITS,
+					GL_MAX_TEXTURE_SIZE,
+					GL_MAX_VARYING_FLOATS,
+					GL_MAX_VERTEX_ATTRIBS,
+					GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
+					GL_MAX_VERTEX_UNIFORM_COMPONENTS,
+					GL_MAX_VIEWPORT_DIMS,
+					GL_STEREO,
+				};
+				const char* GLParamNames[] =
+				{
+					"GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS",
+					"GL_MAX_CUBE_MAP_TEXTURE_SIZE",
+					"GL_MAX_DRAW_BUFFERS",
+					"GL_MAX_FRAGMENT_UNIFORM_COMPONENTS",
+					"GL_MAX_TEXTURE_IMAGE_UNITS",
+					"GL_MAX_TEXTURE_SIZE",
+					"GL_MAX_VARYING_FLOATS",
+					"GL_MAX_VERTEX_ATTRIBS",
+					"GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS",
+					"GL_MAX_VERTEX_UNIFORM_COMPONENTS",
+					"GL_MAX_VIEWPORT_DIMS",
+					"GL_STEREO",
+				};
+
+				char *RendererName = (char *)glGetString(GL_RENDERER);
+				char *RendererVersion = (char *)glGetString(GL_VERSION);
+				printf("%s\n", RendererName);
+				printf("%s\n", RendererVersion);
+				for(u32 Index = 0; Index < ArrayCount(GLParams); ++Index)
+				{
+					s32 Param = 0;
+					glGetIntegerv(GLParams[Index], &Param);
+					printf("%s %i\n", GLParamNames[Index], Param);
+				}
+
 				glEnable(GL_DEBUG_OUTPUT);
 				glDebugMessageCallback(GLDebugCallback, 0);
 				glEnable(GL_DEPTH_TEST);
@@ -194,24 +238,24 @@ int main(int Argc, char **Argv)
 				glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
 				glEnable(GL_SAMPLE_ALPHA_TO_ONE);
 				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 				//
 				// NOTE(Justin): Assets
 				//
 
-				stbi_set_flip_vertically_on_load(true);
 				char *TextureFiles[] =
 				{
 					"textures\\checkerboard.jpg",
 					"textures\\awesomeface.png",
 					"textures\\brickwall.jpg",
 					"textures\\brickwall_normal.jpg",
-					"textures\\Vampire_diffuse.png",
 					"textures\\Vampire_diffuse_transparent.png",
+					"textures\\Vampire_diffuse.png",
 					"textures\\Vampire_emission.png",
 					"textures\\Vampire_normal.png",
-					"textures\\Vampire_specular.png"
-					"textures\\white.bmp"
+					"textures\\Vampire_specular.png",
+					"textures\\Paladin_diffuse.png",
 				};
 				char *ShaderFiles[] =
 				{
@@ -225,6 +269,7 @@ int main(int Argc, char **Argv)
 					"XBot.mesh",
 					"Sphere.mesh",
 					"VampireALusth.mesh",
+					"PaladinWithProp.mesh",
 				};
 				char *XBotAnimDestFiles[] =
 				{
@@ -252,7 +297,6 @@ int main(int Argc, char **Argv)
 					"Vampire_Walking.animation",
 				};
 
-
 				game_state GameState_ = {};
 				game_state *GameState = &GameState_;
 
@@ -275,21 +319,39 @@ int main(int Argc, char **Argv)
 				model *XBot = &GameState->XBot;
 				XBot->Animations.Count = ArrayCount(XBotAnimDestFiles);
 				XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
-				XBot->Meshes[0].DiffuseTexture = GameState->Textures[0].Handle;
-				XBot->Meshes[1].DiffuseTexture = GameState->Textures[0].Handle;
-				XBot->Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
-				XBot->Meshes[1].MaterialFlags = MaterialFlag_Diffuse;
+				for(u32 MeshIndex = 0; MeshIndex < XBot->MeshCount; ++ MeshIndex)
+				{
+					mesh *Mesh = XBot->Meshes + MeshIndex;
+					Mesh->DiffuseTexture = GameState->Textures[0].Handle;
+					Mesh->MaterialFlags = (MaterialFlag_Diffuse);
+				}
 
-				GameState->Light = ModelLoad(Arena, "Sphere.mesh");
-				model *Light = &GameState->Light;
-				Light->Meshes[0].DiffuseTexture = GameState->Textures[0].Handle;
+				GameState->Sphere = ModelLoad(Arena, "Sphere.mesh");
+				model *Sphere = &GameState->Sphere;
+				Sphere->Meshes[0].DiffuseTexture = GameState->Textures[0].Handle;
+				Sphere->Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
+
+				GameState->Cube = ModelLoad(Arena, "Cube.mesh");
+				model *Cube = &GameState->Cube;
+				Cube->Meshes[0].DiffuseTexture = GameState->Textures[2].Handle;
+				Cube->Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
 
 				GameState->Vampire = ModelLoad(Arena, "VampireALusth.mesh");
 				model *Vampire = &GameState->Vampire;
 				Vampire->Animations.Count = ArrayCount(VampireAnimDestFiles);
 				Vampire->Animations.Info = PushArray(Arena, Vampire->Animations.Count, animation_info);
 				Vampire->Meshes[0].DiffuseTexture = GameState->Textures[4].Handle;
-				Vampire->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular);
+				Vampire->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse);
+
+				GameState->Paladin = ModelLoad(Arena, "PaladinWithProp.mesh");
+				model *Paladin = &GameState->Paladin;
+				Paladin->Animations.Count = 0;
+				for(u32 MeshIndex = 0; MeshIndex < Paladin->MeshCount; ++MeshIndex)
+				{
+					mesh *Mesh = Paladin->Meshes + MeshIndex;
+					Mesh->DiffuseTexture = GameState->Textures[9].Handle;
+					Mesh->MaterialFlags = MaterialFlag_Diffuse;
+				}
 
 				for(u32 XBotAnimIndex = 0; XBotAnimIndex < ArrayCount(XBotAnimDestFiles); ++XBotAnimIndex)
 				{
@@ -309,17 +371,25 @@ int main(int Argc, char **Argv)
 
 				OpenGLAllocateAnimatedModel(XBot, Shaders[0].Handle);
 				OpenGLAllocateAnimatedModel(Vampire, Shaders[0].Handle);
-				OpenGLAllocateModel(Light, Shaders[1].Handle);
+				OpenGLAllocateAnimatedModel(Paladin, Shaders[0].Handle);
+				OpenGLAllocateModel(Sphere, Shaders[1].Handle);
+				OpenGLAllocateModel(Cube, Shaders[1].Handle);
 
 				PlayerAdd(GameState);
 				VampireAdd(GameState);
 				LightAdd(GameState);
+				PaladinAdd(GameState);
+				BlockAdd(GameState);
 
 				f32 StartTime = 0.0f;
 				f32 EndTime = 0.0f;
 				f32 DtForFrame = 0.0f;
 				f32 Angle = 0.0f;
 				glfwSetTime(0.0);
+
+				//
+				// NOTE(Justin): Set all the uniforms that do not change during runtime.
+				//
 
 				glUseProgram(Shaders[0].Handle);
 				UniformMatrixSet(Shaders[0].Handle, "View", CameraTransform);
@@ -357,11 +427,23 @@ int main(int Argc, char **Argv)
 							} break;
 							case EntityType_Light:
 							{
-								mat4 Transform = EntityTransform(Entity);
+								mat4 Translate = Mat4Translate(Entity->P);
 								Angle += 20.0f * DtForFrame;
 								mat4 R = Mat4YRotation(DegreeToRad(Angle));
-								mat4 Scale = Mat4Scale(10.0f);
-								OpenGLDrawModel(Light, Shaders[1].Handle, Transform);
+								mat4 Scale = Mat4Scale(1.0f);
+								mat4 Transform = Translate * R * Scale;
+								OpenGLDrawModel(Sphere, Shaders[1].Handle, Transform);
+							} break;
+							case EntityType_Paladin:
+							{
+								mat4 Transform = EntityTransform(Entity);
+								//AnimationUpdate(Vampire, DtForFrame);
+								OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
+							} break;
+							case EntityType_Block:
+							{
+								mat4 Transform = EntityTransform(Entity);
+								OpenGLDrawModel(Cube, Shaders[1].Handle, Transform);
 							} break;
 						}
 					}

@@ -1,10 +1,11 @@
 
+#if RENDER_TEST
 struct texture
 {
 	char *FileName;
 	u32 Handle;
-	GLint InternalFormat;
-	GLenum Format;
+	GLint StoredFormat;
+	GLenum SrcFormat;
 	int Width;
 	int Height;
 	int ChannelCount;
@@ -17,32 +18,46 @@ TextureLoad(char *FileName)
 	texture Texture = {};
 
 	Texture.FileName = FileName;
-	Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 0);
+	stbi_set_flip_vertically_on_load(true);
+	//Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 0);
+	Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 4);
+
 	if(Texture.Memory)
 	{
+#if 0
 		switch(Texture.ChannelCount)
 		{
 			case 1:
 			{
-				Texture.Format = GL_RED;
+				Texture.StoredFormat = GL_R8;
+				Texture.SrcFormat = GL_RED;
 			} break;
 			case 2:
 			{
 			} break;
 			case 3:
 			{
-				Texture.Format = GL_RGB;
+				Texture.StoredFormat = GL_RGB8;
+				Texture.SrcFormat = GL_RGB;
 			} break;
 			case 4:
 			{
-				Texture.Format = GL_RGBA;
+				Texture.StoredFormat = GL_RGBA8;
+				Texture.SrcFormat = GL_RGBA;
 			} break;
 			default:
 			{
 				Assert(0);
 			} break;
 		}
+#else
+		Texture.StoredFormat = GL_RGBA8;
+		Texture.SrcFormat = GL_RGBA;
+		//Texture.StoredFormat = GL_SRGB8_ALPHA8;
+		//Texture.SrcFormat = GL_BGRA_EXT;
+#endif
 	}
+	stbi_set_flip_vertically_on_load(false);
 
 	return(Texture);
 }
@@ -55,6 +70,7 @@ TextureUnLoad(texture *Texture)
 		stbi_image_free(Texture->Memory);
 	}
 }
+#endif
 
 internal void 
 ConvertMeshFormat(memory_arena *Arena, char *OutputFileName, char *FileName)

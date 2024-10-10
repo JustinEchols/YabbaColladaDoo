@@ -38,6 +38,26 @@ LightAdd(game_state *GameState)
 	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
 }
 
+internal void
+PaladinAdd(game_state *GameState)
+{
+	entity *Entity = EntityAdd(GameState, EntityType_Paladin);
+	Entity->P = V3(-100.0f, -80.0f, -200.0f);
+	Entity->dP = V3(0.0f);
+	Entity->ddP = V3(0.0f);
+	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
+}
+
+internal void
+BlockAdd(game_state *GameState)
+{
+	entity *Entity = EntityAdd(GameState, EntityType_Block);
+	Entity->P = V3(0.0f, 5.0f, -30.0f);
+	Entity->dP = V3(0.0f);
+	Entity->ddP = V3(0.0f);
+	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
+}
+
 internal mat4
 EntityTransform(entity *Entity, f32 Scale = 1.0f)
 {

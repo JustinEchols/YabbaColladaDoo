@@ -676,7 +676,6 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			xml_node Phong = {};
 			NodeGet(Root, &Effect, "effect", (char *)EffectNodeName.Data);
 			NodeGet(&Effect, &Phong, "phong");
-
 			for(s32 k = 0; k < Phong.ChildrenCount; ++k)
 			{
 				xml_node *Child = Phong.Children[k];
@@ -819,6 +818,14 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 			V->UV.x = UV[Stride2 * IndexUV + 0];
 			V->UV.y = UV[Stride2 * IndexUV + 1];
+
+			if(VertexIndex <= 64)
+			{
+				printf("vertex %d\n", VertexIndex);
+				printf("%f %f %f\n", V->P.x, V->P.y, V->P.z);
+				printf("%f %f %f\n", V->N.x, V->N.y, V->N.z);
+				printf("%f %f\n", V->UV.x, V->UV.y);
+			}
 		}
 
 		//

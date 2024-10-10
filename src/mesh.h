@@ -71,17 +71,15 @@ struct mesh
 
 struct model
 {
-	//basis Basis;
-
 	b32 HasSkeleton;
 
 	u32 MeshCount;
 	mesh *Meshes;
 
 	// TODO(Justin): Should this be stored at the mesh level?
-	u32 VA[2];
-	u32 VB[2];
-	u32 IBO[2];
+	u32 VA[4];
+	u32 VB[4];
+	u32 IBO[4];
 
 	animation Animations;
 };

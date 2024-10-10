@@ -159,11 +159,11 @@ OpenGLAllocateTexture(texture *Texture)
 
 		glTexImage2D(GL_TEXTURE_2D,
 					0,
-					Texture->Format,
+					Texture->StoredFormat,
 					Texture->Width,
 					Texture->Height,
 					0, 
-					Texture->Format,
+					Texture->SrcFormat,
 					GL_UNSIGNED_BYTE, 
 					Texture->Memory);
 
@@ -190,7 +190,7 @@ OpenGLAllocateAnimatedModel(model *Model, u32 ShaderProgram)
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, N));
-		glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(vertex), (void *)OffsetOf(vertex, UV));
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, UV));
 		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, sizeof(vertex), (void *)OffsetOf(vertex, JointInfo));
 		glVertexAttribIPointer(4, 3, GL_UNSIGNED_INT, sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, JointIndex)));
 		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, Weights)));
@@ -209,7 +209,6 @@ OpenGLAllocateAnimatedModel(model *Model, u32 ShaderProgram)
 
 		s32 AttrCount;
 		glGetProgramiv(ShaderProgram, GL_ACTIVE_ATTRIBUTES, &AttrCount);
-		Assert(ExpectedAttributeCount == AttrCount);
 
 		char Name[256];
 		s32 Size = 0;
@@ -271,41 +270,33 @@ OpenGLAllocateModel(model *Model, u32 ShaderProgram)
 internal void
 OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 {
-	//mat4 M = Mat4Translate(Model->Basis.O) * Mat4(Model->Basis.X, Model->Basis.Y, Model->Basis.Z);
-
-	v3 LightDir = V3(0.0f, 0.0f, 1.0f);
-
 	glUseProgram(ShaderProgram);
-	//UniformV3Set(ShaderProgram, "LightDir", LightDir);
-	UniformBoolSet(ShaderProgram, "Texture", 0);
 	UniformMatrixSet(ShaderProgram, "Model", M);
+	//UniformBoolSet(ShaderProgram, "UsingTexture", true);
 	for(u32 MeshIndex = 0; MeshIndex < Model->MeshCount; ++MeshIndex)
 	{
 		mesh *Mesh = Model->Meshes + MeshIndex;
 		if(FlagIsSet(Mesh, MaterialFlag_Diffuse))
 		{
-			UniformBoolSet(ShaderProgram, "UsingTexture", true);
+			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
 			glActiveTexture(GL_TEXTURE0);
+			UniformBoolSet(ShaderProgram, "DiffuseTexture", 0);
 			glBindTexture(GL_TEXTURE_2D, Mesh->DiffuseTexture);
 			glBindVertexArray(Model->VA[MeshIndex]);
-			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
-			//UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
-			//UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
-			//UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
 			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 		else
 		{
-			UniformBoolSet(ShaderProgram, "UsingTexture", false);
-			glBindVertexArray(Model->VA[MeshIndex]);
-			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
-			UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
-			//UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
-			//UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
-			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
-			glBindVertexArray(0);
+			////UniformBoolSet(ShaderProgram, "UsingTexture", false);
+			//glBindVertexArray(Model->VA[MeshIndex]);
+			//UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
+			//UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
+			////UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
+			////UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
+			//glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
+			//glBindVertexArray(0);
 		}
 	}
 }
@@ -313,7 +304,6 @@ OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 internal void
 OpenGLDrawModel(model *Model, u32 ShaderProgram, mat4 Transform)
 {
-	//mat4 Transform = Mat4Translate(Model->Basis.O) * R * Scale;
 	glUseProgram(ShaderProgram);
 	UniformBoolSet(ShaderProgram, "Texture", 0);
 	UniformMatrixSet(ShaderProgram, "Model", Transform);
