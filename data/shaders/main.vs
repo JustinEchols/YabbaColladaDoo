@@ -8,6 +8,7 @@
 // GL_ACTIVE_ATTRIBUTES and ASSERT that the return value is equal to the
 // counter.
 
+
 #version 430 core
 layout (location = 0) in vec3 P;
 layout (location = 1) in vec3 Normal;
@@ -23,12 +24,14 @@ uniform mat4 Projection;
 #define MAX_JOINT_COUNT 100
 uniform mat4 Transforms[MAX_JOINT_COUNT];
 
-out vec3 N;
+out vec3 SurfaceP;
+out vec3 SurfaceN;
 out vec2 UV;
 
 void main()
 {
 	vec4 Pos = vec4(0.0);
+	vec4 Norm = vec4(0.0);
 	for(uint i = 0; i < 3; ++i)
 	{
 		if(i < JointCount)
@@ -37,10 +40,14 @@ void main()
 			float W = Weights[i];
 			mat4 T = Transforms[JIndex];
 			Pos += W * T * vec4(P, 1.0);
+			Norm += W * T * vec4(Normal, 0.0);
 		}
 	}
 
+	Norm = normalize(Norm);
+
 	gl_Position = Projection * View * Model * Pos;
-	N = vec3(transpose(inverse(Model)) * vec4(Normal, 1.0));
+	SurfaceP = vec3(Model * Pos);
+	SurfaceN = vec3(transpose(inverse(Model)) * vec4(Norm.xyz, 1.0));
 	UV = Tex;
 }
