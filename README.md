@@ -16,7 +16,9 @@ The number of attributes of a node is set to a compile time constant COLLADA_ATT
 
 ## Dependencies
 C runtime library.
+
 GLFW and GLEW which facilitate rendering tests via OpenGL.
+
 stbi_image.h for image loading.
 
 Visual Studio 2019 if you intend to use the build.bat file to build.
