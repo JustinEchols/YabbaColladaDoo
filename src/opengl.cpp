@@ -191,8 +191,8 @@ OpenGLAllocateAnimatedModel(model *Model, u32 ShaderProgram)
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, N));
 		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)OffsetOf(vertex, UV));
-		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, sizeof(vertex), (void *)OffsetOf(vertex, JointInfo));
-		glVertexAttribIPointer(4, 3, GL_UNSIGNED_INT, sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, JointIndex)));
+		glVertexAttribIPointer(3, 1,GL_UNSIGNED_INT,	sizeof(vertex), (void *)OffsetOf(vertex, JointInfo));
+		glVertexAttribIPointer(4, 3,GL_UNSIGNED_INT,	sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, JointIndex)));
 		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)(OffsetOf(vertex, JointInfo) + OffsetOf(joint_info, Weights)));
 
 		glEnableVertexAttribArray(0);
@@ -272,12 +272,13 @@ OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 {
 	glUseProgram(ShaderProgram);
 	UniformMatrixSet(ShaderProgram, "Model", M);
-	//UniformBoolSet(ShaderProgram, "UsingTexture", true);
+
 	for(u32 MeshIndex = 0; MeshIndex < Model->MeshCount; ++MeshIndex)
 	{
 		mesh *Mesh = Model->Meshes + MeshIndex;
 		if(FlagIsSet(Mesh, MaterialFlag_Diffuse))
 		{
+			UniformBoolSet(ShaderProgram, "UsingTexture", true);
 			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
 			glActiveTexture(GL_TEXTURE0);
 			UniformBoolSet(ShaderProgram, "DiffuseTexture", 0);
@@ -289,14 +290,14 @@ OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 		}
 		else
 		{
-			////UniformBoolSet(ShaderProgram, "UsingTexture", false);
-			//glBindVertexArray(Model->VA[MeshIndex]);
-			//UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
-			//UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
-			////UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
-			////UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
-			//glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
-			//glBindVertexArray(0);
+			UniformBoolSet(ShaderProgram, "UsingTexture", false);
+			glBindVertexArray(Model->VA[MeshIndex]);
+			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
+			UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
+			//UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
+			//UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
+			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
 		}
 	}
 }

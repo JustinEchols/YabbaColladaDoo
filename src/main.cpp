@@ -2,6 +2,7 @@
 /*
  TODO(Justin):
  [] Better opengl error logging/checking!  
+ [] Transform normals via joint transforms!  
  [] File paths from build directory
  [] Load collada file with multiple texture files 
  [X] Simple animation file format 
@@ -111,6 +112,7 @@ struct game_state
 	model XBot;
 	model Vampire;
 	model Paladin;
+	model DebugArrow;
 
 	texture Textures[16];
 };
@@ -256,6 +258,9 @@ int main(int Argc, char **Argv)
 					"textures\\Vampire_normal.png",
 					"textures\\Vampire_specular.png",
 					"textures\\Paladin_diffuse.png",
+					"textures\\Paladin_normal.png",
+					"textures\\Paladin_specular.png"
+					"textures\\white.bmp"
 				};
 				char *ShaderFiles[] =
 				{
@@ -315,20 +320,18 @@ int main(int Argc, char **Argv)
 					Shaders[ShaderIndex].Handle = GLProgramCreate(Shaders[ShaderIndex].VS, Shaders[ShaderIndex].FS);
 				}
 
+				//
+				// NOTE(Justin): Models
+				//
+
 				GameState->XBot = ModelLoad(Arena, "XBot.mesh");
 				model *XBot = &GameState->XBot;
 				XBot->Animations.Count = ArrayCount(XBotAnimDestFiles);
 				XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
-				for(u32 MeshIndex = 0; MeshIndex < XBot->MeshCount; ++ MeshIndex)
-				{
-					mesh *Mesh = XBot->Meshes + MeshIndex;
-					Mesh->DiffuseTexture = GameState->Textures[0].Handle;
-					Mesh->MaterialFlags = (MaterialFlag_Diffuse);
-				}
 
 				GameState->Sphere = ModelLoad(Arena, "Sphere.mesh");
 				model *Sphere = &GameState->Sphere;
-				Sphere->Meshes[0].DiffuseTexture = GameState->Textures[0].Handle;
+				Sphere->Meshes[0].DiffuseTexture = GameState->Textures[10].Handle;
 				Sphere->Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
 
 				GameState->Cube = ModelLoad(Arena, "Cube.mesh");
@@ -353,6 +356,10 @@ int main(int Argc, char **Argv)
 					Mesh->MaterialFlags = MaterialFlag_Diffuse;
 				}
 
+				//
+				// NOTE(Justin): Animations
+				//
+
 				for(u32 XBotAnimIndex = 0; XBotAnimIndex < ArrayCount(XBotAnimDestFiles); ++XBotAnimIndex)
 				{
 					char *Dest = XBotAnimDestFiles[XBotAnimIndex];
@@ -374,6 +381,7 @@ int main(int Argc, char **Argv)
 				OpenGLAllocateAnimatedModel(Paladin, Shaders[0].Handle);
 				OpenGLAllocateModel(Sphere, Shaders[1].Handle);
 				OpenGLAllocateModel(Cube, Shaders[1].Handle);
+				//OpenGLAllocateModel(DebugArrow, Shaders[1].Handle);
 
 				PlayerAdd(GameState);
 				VampireAdd(GameState);
@@ -399,8 +407,44 @@ int main(int Argc, char **Argv)
 				UniformMatrixSet(Shaders[1].Handle, "View", CameraTransform);
 				UniformMatrixSet(Shaders[1].Handle, "Projection", PerspectiveTransform);
 
+				v3 LightColor = V3(1.0f);
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
+					Angle += DtForFrame;
+
+					v3 LightP = V3(0.0f);
+					for(u32 EntityIndex = 0; EntityIndex < GameState->EntityCount; ++EntityIndex)
+					{
+						entity *Entity = GameState->Entities + EntityIndex;
+						switch(Entity->Type)
+						{
+							case EntityType_Player:
+							{
+							} break;
+							case EntityType_Vampire:
+							{
+							} break;
+							case EntityType_Light:
+							{
+#if 1
+								v3 *P = &Entity->P;
+								//P->x += 5.0f * cosf(DegreeToRad(Angle)) * DtForFrame;
+								P->x += 2.0f * cosf((Angle));
+								//P->z += -2.0f * sinf((Angle));
+								//P->z += -1.0f * sinf(DegreeToRad(Angle));
+								LightP = *P;
+#endif
+
+							} break;
+							case EntityType_Paladin:
+							{
+							} break;
+							case EntityType_Block:
+							{
+							} break;
+						}
+					}
+
 					//
 					// NOTE(Justin): Render.
 					//
@@ -415,35 +459,37 @@ int main(int Argc, char **Argv)
 						{
 							case EntityType_Player:
 							{
+								glUseProgram(Shaders[0].Handle);
+								UniformV3Set(Shaders[0].Handle, "LightP", LightP);
+								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
 								mat4 Transform = EntityTransform(Entity);
-								AnimationUpdate(XBot, DtForFrame);
+								//AnimationUpdate(XBot, DtForFrame);
 								OpenGLDrawAnimatedModel(XBot, Shaders[0].Handle, Transform);
 							} break;
 							case EntityType_Vampire:
 							{
+								glUseProgram(Shaders[0].Handle);
+								UniformV3Set(Shaders[0].Handle, "LightP", LightP);
+								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
 								mat4 Transform = EntityTransform(Entity);
-								AnimationUpdate(Vampire, DtForFrame);
+								//AnimationUpdate(Vampire, DtForFrame);
 								OpenGLDrawAnimatedModel(Vampire, Shaders[0].Handle, Transform);
 							} break;
 							case EntityType_Light:
 							{
-								mat4 Translate = Mat4Translate(Entity->P);
-								Angle += 20.0f * DtForFrame;
-								mat4 R = Mat4YRotation(DegreeToRad(Angle));
-								mat4 Scale = Mat4Scale(1.0f);
-								mat4 Transform = Translate * R * Scale;
+								mat4 Transform = EntityTransform(Entity, 20.0f);
 								OpenGLDrawModel(Sphere, Shaders[1].Handle, Transform);
 							} break;
 							case EntityType_Paladin:
 							{
-								mat4 Transform = EntityTransform(Entity);
+								//mat4 Transform = EntityTransform(Entity);
 								//AnimationUpdate(Vampire, DtForFrame);
-								OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
+								//OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
 							} break;
 							case EntityType_Block:
 							{
-								mat4 Transform = EntityTransform(Entity);
-								OpenGLDrawModel(Cube, Shaders[1].Handle, Transform);
+								//mat4 Transform = EntityTransform(Entity);
+								//OpenGLDrawModel(Cube, Shaders[1].Handle, Transform);
 							} break;
 						}
 					}
