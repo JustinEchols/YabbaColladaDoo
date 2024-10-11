@@ -2,16 +2,17 @@
 /*
  TODO(Justin):
  [] Better opengl error logging/checking!  
- [] Transform normals via joint transforms!  
+ [] Better asset system  
+ [] Better asset file structure 
+ [X] Transform normals via joint transforms!  
+ [?] How to get the correct normal when using a normal map AND doing skeletal animation?
  [] File paths from build directory
- [] Load collada file with multiple texture files 
  [X] Simple animation file format 
- [*] Test different models.
+ [X] Test different models.
  [X] Instead of storing mat4's for animation, store pos, quat, scale and construct for both key frame and model
  [X] Check UV mapping 
  [] Phong lighting 
- [] Different model loading based on whether or not a normal map is available...
- [] Diffuse, ambient, specular, and normal textures in file format 
+ [?] Diffuse, ambient, specular, and normal textures in file format 
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [] Remove strtok_s
  [?] Use temporary memory when initializing mesh
@@ -102,6 +103,41 @@ ArraySum(u32 *A, u32 Count)
 #include "opengl.cpp"
 #include "shaders.h"
 
+enum game_keys
+{
+	Key_W,
+	Key_A,
+	Key_S,
+	Key_D,
+
+	Key_Count
+};
+
+struct game_button
+{
+	b32 IsDown;
+};
+
+struct keyboard_controller
+{
+	union
+	{
+		struct
+		{
+			game_button W;
+			game_button A;
+			game_button S;
+			game_button D;
+		};
+		game_button Buttons[Key_Count];
+	};
+};
+
+struct game_input
+{
+	keyboard_controller KeyboardController;
+};
+
 struct game_state
 {
 	u32 EntityCount;
@@ -177,7 +213,7 @@ int main(int Argc, char **Argv)
 				// NOTE(Justin): Transformations
 				//
 
-				v3 CameraP = V3(0.0f, 5.0f, 3.0f);
+				v3 CameraP = V3(0.0f, 5.0f, 100.0f);
 				v3 Direction = V3(0.0f, 0.0f, -1.0f);
 				mat4 CameraTransform = Mat4Camera(CameraP, CameraP + Direction);
 
@@ -253,13 +289,13 @@ int main(int Argc, char **Argv)
 					"textures\\brickwall.jpg",
 					"textures\\brickwall_normal.jpg",
 					"textures\\Vampire_diffuse_transparent.png",
+					"textures\\Vampire_specular.png",
 					"textures\\Vampire_diffuse.png",
 					"textures\\Vampire_emission.png",
 					"textures\\Vampire_normal.png",
-					"textures\\Vampire_specular.png",
 					"textures\\Paladin_diffuse.png",
-					"textures\\Paladin_normal.png",
 					"textures\\Paladin_specular.png"
+					"textures\\Paladin_normal.png",
 					"textures\\white.bmp"
 				};
 				char *ShaderFiles[] =
@@ -276,7 +312,7 @@ int main(int Argc, char **Argv)
 					"VampireALusth.mesh",
 					"PaladinWithProp.mesh",
 				};
-				char *XBotAnimDestFiles[] =
+				char *XBotAnimations[] =
 				{
 					"XBot_ActionIdle.animation",
 					"XBot_ActionIdleToStandingIdle.animation",
@@ -296,10 +332,14 @@ int main(int Argc, char **Argv)
 					"XBot_Walking.animation",
 					"XBot_WalkingTurn180.animation"
 				};
-				char *VampireAnimDestFiles[] =
+				char *VampireAnimations[] =
 				{
-					"Vampire_Bite.animation",
 					"Vampire_Walking.animation",
+					"Vampire_Bite.animation",
+				};
+				char *PaladinAnimations[] =
+				{
+					"Paladin_SwordAndShieldIdle.animation",
 				};
 
 				game_state GameState_ = {};
@@ -326,12 +366,12 @@ int main(int Argc, char **Argv)
 
 				GameState->XBot = ModelLoad(Arena, "XBot.mesh");
 				model *XBot = &GameState->XBot;
-				XBot->Animations.Count = ArrayCount(XBotAnimDestFiles);
+				XBot->Animations.Count = ArrayCount(XBotAnimations);
 				XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
 
 				GameState->Sphere = ModelLoad(Arena, "Sphere.mesh");
 				model *Sphere = &GameState->Sphere;
-				Sphere->Meshes[0].DiffuseTexture = GameState->Textures[10].Handle;
+				Sphere->Meshes[0].DiffuseTexture = GameState->Textures[12].Handle;
 				Sphere->Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
 
 				GameState->Cube = ModelLoad(Arena, "Cube.mesh");
@@ -341,38 +381,49 @@ int main(int Argc, char **Argv)
 
 				GameState->Vampire = ModelLoad(Arena, "VampireALusth.mesh");
 				model *Vampire = &GameState->Vampire;
-				Vampire->Animations.Count = ArrayCount(VampireAnimDestFiles);
+				Vampire->Animations.Count = ArrayCount(VampireAnimations);
 				Vampire->Animations.Info = PushArray(Arena, Vampire->Animations.Count, animation_info);
+
 				Vampire->Meshes[0].DiffuseTexture = GameState->Textures[4].Handle;
-				Vampire->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse);
+				Vampire->Meshes[0].SpecularTexture = GameState->Textures[5].Handle;
+				Vampire->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular);
 
 				GameState->Paladin = ModelLoad(Arena, "PaladinWithProp.mesh");
 				model *Paladin = &GameState->Paladin;
-				Paladin->Animations.Count = 0;
+				Paladin->Animations.Count = ArrayCount(PaladinAnimations);
+				Paladin->Animations.Info = PushArray(Arena, Paladin->Animations.Count, animation_info);
 				for(u32 MeshIndex = 0; MeshIndex < Paladin->MeshCount; ++MeshIndex)
 				{
 					mesh *Mesh = Paladin->Meshes + MeshIndex;
 					Mesh->DiffuseTexture = GameState->Textures[9].Handle;
-					Mesh->MaterialFlags = MaterialFlag_Diffuse;
+					Mesh->SpecularTexture = GameState->Textures[10].Handle;
+					Mesh->MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular);
 				}
 
 				//
 				// NOTE(Justin): Animations
 				//
 
-				for(u32 XBotAnimIndex = 0; XBotAnimIndex < ArrayCount(XBotAnimDestFiles); ++XBotAnimIndex)
+				for(u32 XBotAnimIndex = 0; XBotAnimIndex < ArrayCount(XBotAnimations); ++XBotAnimIndex)
 				{
-					char *Dest = XBotAnimDestFiles[XBotAnimIndex];
+					char *Dest = XBotAnimations[XBotAnimIndex];
 					animation_info TestAnimation = AnimationLoad(Arena, Dest);
 					animation_info *Info = XBot->Animations.Info + XBotAnimIndex;
 					*Info = TestAnimation;
 				}
 
-				for(u32 VampAnimIndex = 0; VampAnimIndex < ArrayCount(VampireAnimDestFiles); ++VampAnimIndex)
+				for(u32 VampAnimIndex = 0; VampAnimIndex < ArrayCount(VampireAnimations); ++VampAnimIndex)
 				{
-					char *Dest = VampireAnimDestFiles[VampAnimIndex];
+					char *Dest = VampireAnimations[VampAnimIndex];
 					animation_info TestAnimation = AnimationLoad(Arena, Dest);
 					animation_info *Info = Vampire->Animations.Info + VampAnimIndex;
+					*Info = TestAnimation;
+				}
+				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(PaladinAnimations); ++AnimIndex)
+				{
+					char *FileName = PaladinAnimations[AnimIndex];
+					animation_info TestAnimation = AnimationLoad(Arena, FileName);
+					animation_info *Info = Paladin->Animations.Info + AnimIndex;
 					*Info = TestAnimation;
 				}
 
@@ -408,6 +459,7 @@ int main(int Argc, char **Argv)
 				UniformMatrixSet(Shaders[1].Handle, "Projection", PerspectiveTransform);
 
 				v3 LightColor = V3(1.0f);
+				v3 Ambient = V3(0.1f);
 				while(!glfwWindowShouldClose(Window.Handle))
 				{
 					Angle += DtForFrame;
@@ -426,14 +478,10 @@ int main(int Argc, char **Argv)
 							} break;
 							case EntityType_Light:
 							{
-#if 1
 								v3 *P = &Entity->P;
-								//P->x += 5.0f * cosf(DegreeToRad(Angle)) * DtForFrame;
 								P->x += 2.0f * cosf((Angle));
-								//P->z += -2.0f * sinf((Angle));
-								//P->z += -1.0f * sinf(DegreeToRad(Angle));
+								P->z += -2.0f * sinf((Angle));
 								LightP = *P;
-#endif
 
 							} break;
 							case EntityType_Paladin:
@@ -460,19 +508,21 @@ int main(int Argc, char **Argv)
 							case EntityType_Player:
 							{
 								glUseProgram(Shaders[0].Handle);
+								UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
 								UniformV3Set(Shaders[0].Handle, "LightP", LightP);
 								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
 								mat4 Transform = EntityTransform(Entity);
-								//AnimationUpdate(XBot, DtForFrame);
+								AnimationUpdate(XBot, DtForFrame);
 								OpenGLDrawAnimatedModel(XBot, Shaders[0].Handle, Transform);
 							} break;
 							case EntityType_Vampire:
 							{
 								glUseProgram(Shaders[0].Handle);
+								UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
 								UniformV3Set(Shaders[0].Handle, "LightP", LightP);
 								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
 								mat4 Transform = EntityTransform(Entity);
-								//AnimationUpdate(Vampire, DtForFrame);
+								AnimationUpdate(Vampire, DtForFrame);
 								OpenGLDrawAnimatedModel(Vampire, Shaders[0].Handle, Transform);
 							} break;
 							case EntityType_Light:
@@ -482,9 +532,9 @@ int main(int Argc, char **Argv)
 							} break;
 							case EntityType_Paladin:
 							{
-								//mat4 Transform = EntityTransform(Entity);
-								//AnimationUpdate(Vampire, DtForFrame);
-								//OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
+								mat4 Transform = EntityTransform(Entity);
+								AnimationUpdate(Paladin, DtForFrame);
+								OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
 							} break;
 							case EntityType_Block:
 							{

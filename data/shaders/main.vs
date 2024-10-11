@@ -8,7 +8,6 @@
 // GL_ACTIVE_ATTRIBUTES and ASSERT that the return value is equal to the
 // counter.
 
-
 #version 430 core
 layout (location = 0) in vec3 P;
 layout (location = 1) in vec3 Normal;
@@ -44,10 +43,8 @@ void main()
 		}
 	}
 
-	Norm = normalize(Norm);
-
 	gl_Position = Projection * View * Model * Pos;
 	SurfaceP = vec3(Model * Pos);
-	SurfaceN = vec3(transpose(inverse(Model)) * vec4(Norm.xyz, 1.0));
+	SurfaceN = vec3(transpose(inverse(Model)) * Norm);
 	UV = Tex;
 }

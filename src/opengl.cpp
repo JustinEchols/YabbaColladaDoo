@@ -280,13 +280,21 @@ OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 		{
 			UniformBoolSet(ShaderProgram, "UsingTexture", true);
 			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
+
 			glActiveTexture(GL_TEXTURE0);
 			UniformBoolSet(ShaderProgram, "DiffuseTexture", 0);
 			glBindTexture(GL_TEXTURE_2D, Mesh->DiffuseTexture);
+
+			glActiveTexture(GL_TEXTURE1);
+			UniformBoolSet(ShaderProgram, "SpecularTexture", 1);
+			glBindTexture(GL_TEXTURE_2D, Mesh->SpecularTexture);
+
 			glBindVertexArray(Model->VA[MeshIndex]);
 			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 			glBindTexture(GL_TEXTURE_2D, 0);
+
+			glActiveTexture(GL_TEXTURE0);
 		}
 		else
 		{
@@ -294,7 +302,7 @@ OpenGLDrawAnimatedModel(model *Model, u32 ShaderProgram, mat4 M)
 			glBindVertexArray(Model->VA[MeshIndex]);
 			UniformMatrixArraySet(ShaderProgram, "Transforms", Mesh->ModelSpaceTransforms, Mesh->JointCount);
 			UniformV4Set(ShaderProgram, "Diffuse", Mesh->MaterialSpec.Diffuse);
-			//UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
+			UniformV4Set(ShaderProgram, "Specular", Mesh->MaterialSpec.Specular);
 			//UniformF32Set(ShaderProgram, "Shininess", Mesh->MaterialSpec.Shininess);
 			glDrawElements(GL_TRIANGLES, Mesh->IndicesCount, GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);

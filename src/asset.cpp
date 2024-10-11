@@ -19,45 +19,16 @@ TextureLoad(char *FileName)
 
 	Texture.FileName = FileName;
 	stbi_set_flip_vertically_on_load(true);
-	//Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 0);
+	// NOTE(Justin): Force the image to load with 4 components. All texture formats will be the same.
 	Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 4);
+	stbi_set_flip_vertically_on_load(false);
 
 	if(Texture.Memory)
 	{
-#if 0
-		switch(Texture.ChannelCount)
-		{
-			case 1:
-			{
-				Texture.StoredFormat = GL_R8;
-				Texture.SrcFormat = GL_RED;
-			} break;
-			case 2:
-			{
-			} break;
-			case 3:
-			{
-				Texture.StoredFormat = GL_RGB8;
-				Texture.SrcFormat = GL_RGB;
-			} break;
-			case 4:
-			{
-				Texture.StoredFormat = GL_RGBA8;
-				Texture.SrcFormat = GL_RGBA;
-			} break;
-			default:
-			{
-				Assert(0);
-			} break;
-		}
-#else
 		Texture.StoredFormat = GL_RGBA8;
 		Texture.SrcFormat = GL_RGBA;
-		//Texture.StoredFormat = GL_SRGB8_ALPHA8;
-		//Texture.SrcFormat = GL_BGRA_EXT;
-#endif
 	}
-	stbi_set_flip_vertically_on_load(false);
+
 
 	return(Texture);
 }
