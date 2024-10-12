@@ -45,11 +45,11 @@ void main()
 	{
 		if(i < JointCount)
 		{
-			uint JIndex = JointTransformIndices[i];
-			float W = Weights[i];
-			mat4 T = Transforms[JIndex];
-			Pos += W * T * vec4(P, 1.0);
-			Norm += W * T * vec4(Normal, 0.0);
+			uint JointIndex = JointTransformIndices[i];
+			float Weight = Weights[i];
+			mat4 Xform = Transforms[JointIndex];
+			Pos += Weight * Xform * vec4(P, 1.0);
+			Norm += Weight * Xform * vec4(Normal, 0.0);
 		}
 	}
 
@@ -75,7 +75,7 @@ void main()
 	else
 	{
 		SurfaceP = vec3(Model * Pos);
-		SurfaceN = vec3(transpose(inverse(Model)) * Norm);
+		SurfaceN = NormalMatrix * Norm.xyz;
 		LightP = LightPosition;
 		CameraP = CameraPosition;
 	}
