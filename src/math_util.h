@@ -189,6 +189,49 @@ Square(f32 C)
 	return(Result);
 }
 
+//
+// NOTE(Justin): v2 operations
+//
+
+inline v2
+operator *(f32 C, v2 A)
+{
+	v2 Result = {};
+
+	Result.x = C * A.x;
+	Result.y = C * A.y;
+
+	return(Result);
+}
+
+inline v2
+operator *(v2 A, f32 C)
+{
+	v2 Result = C * A;
+	return(Result);
+}
+
+inline v2
+operator +(v2 A, v2 B)
+{
+	v2 Result;
+
+	Result.x = A.x + B.x;
+	Result.y = A.y + B.y;
+
+	return(Result);
+}
+
+inline v2
+operator -(v2 A, v2 B)
+{
+	v2 Result;
+
+	Result.x = A.x - B.x;
+	Result.y = A.y - B.y;
+
+	return(Result);
+}
 
 inline v3
 operator +(v3 A, v3 B)

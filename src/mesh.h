@@ -1,5 +1,9 @@
 #if !defined(MESH_H)
 
+// 
+// NOTE(Justin): If writing out these must be aligned.
+// 
+
 #pragma pack(push, 1)
 struct joint_info
 {
@@ -53,6 +57,9 @@ struct mesh
 	u32 *Indices;
 	vertex *Vertices;
 
+	v3 *Tangents;
+	v3 *BiTangents;
+
 	joint *Joints;
 
 	mat4 BindTransform;
@@ -80,6 +87,8 @@ struct model
 	u32 VA[4];
 	u32 VB[4];
 	u32 IBO[4];
+	u32 TangentVB[4];
+	u32 BiTangentVB[4];
 
 	animation Animations;
 };

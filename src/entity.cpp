@@ -12,7 +12,7 @@ internal void
 PlayerAdd(game_state *GameState)
 {
 	entity *Entity = EntityAdd(GameState, EntityType_Player);
-	Entity->P = V3(100.0f, -80.0f, -200.0f);
+	Entity->P = V3(10.0f, 0.0f, -5.0f);
 	Entity->dP = V3(0.0f);
 	Entity->ddP = V3(0.0f);
 	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
@@ -22,7 +22,7 @@ internal void
 VampireAdd(game_state *GameState)
 {
 	entity *Entity = EntityAdd(GameState, EntityType_Vampire);
-	Entity->P = V3(-100.0f, -80.0f, -200.0f);
+	Entity->P = V3(-10.0f, 0.0f, -5.0f);
 	Entity->dP = V3(0.0f);
 	Entity->ddP = V3(0.0f);
 	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
@@ -32,7 +32,7 @@ internal void
 LightAdd(game_state *GameState)
 {
 	entity *Entity = EntityAdd(GameState, EntityType_Light);
-	Entity->P = V3(0.0f, 20.0f, -175.0f);
+	Entity->P = V3(0.0f, 5.0f, 0.0f);
 	Entity->dP = V3(0.0f);
 	Entity->ddP = V3(0.0f);
 	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
@@ -42,7 +42,7 @@ internal void
 PaladinAdd(game_state *GameState)
 {
 	entity *Entity = EntityAdd(GameState, EntityType_Paladin);
-	Entity->P = V3(0.0f, -80.0f, -300.0f);
+	Entity->P = V3(0.0f, 0.0f, -5.0f);
 	Entity->dP = V3(0.0f);
 	Entity->ddP = V3(0.0f);
 	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);
@@ -52,7 +52,7 @@ internal void
 BlockAdd(game_state *GameState)
 {
 	entity *Entity = EntityAdd(GameState, EntityType_Block);
-	Entity->P = V3(0.0f, 5.0f, -30.0f);
+	Entity->P = V3(10.0f, 5.0f, -5.0f);
 	Entity->dP = V3(0.0f);
 	Entity->ddP = V3(0.0f);
 	Entity->Orientation = Quaternion(V3(0.0f, 1.0f, 0.0f), 0.0f);

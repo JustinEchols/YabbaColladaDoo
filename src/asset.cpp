@@ -19,16 +19,15 @@ TextureLoad(char *FileName)
 
 	Texture.FileName = FileName;
 	stbi_set_flip_vertically_on_load(true);
+
 	// NOTE(Justin): Force the image to load with 4 components. All texture formats will be the same.
 	Texture.Memory = stbi_load(FileName, &Texture.Width, &Texture.Height, &Texture.ChannelCount, 4);
 	stbi_set_flip_vertically_on_load(false);
-
 	if(Texture.Memory)
 	{
 		Texture.StoredFormat = GL_RGBA8;
 		Texture.SrcFormat = GL_RGBA;
 	}
-
 
 	return(Texture);
 }
@@ -213,6 +212,40 @@ ModelLoad(memory_arena *Arena, char *FileName)
 
 			MeshSource++;
 		}
+
+#if 1
+		for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
+		{
+			mesh *Mesh = Model.Meshes + MeshIndex;
+			Mesh->Tangents = PushArray(Arena, Mesh->VertexCount, v3);
+			Mesh->BiTangents = PushArray(Arena, Mesh->VertexCount, v3);
+			for(u32 TriangleIndex = 0; TriangleIndex < Mesh->VertexCount; TriangleIndex += 3)
+			{
+				vertex V0 = Mesh->Vertices[TriangleIndex + 0];
+				vertex V1 = Mesh->Vertices[TriangleIndex + 1];
+				vertex V2 = Mesh->Vertices[TriangleIndex + 2];
+
+				v3 E0 = V1.P - V0.P;
+				v3 E1 = V2.P - V0.P;
+
+				v2 dUV0 = V1.UV - V0.UV;
+				v2 dUV1 = V2.UV - V0.UV;
+
+				f32 C = (1.0f / (dUV0.x * dUV1.y - dUV0.y * dUV1.x));
+				v3 Tangent = Normalize(C * (dUV1.y * E0 - dUV0.y * E1));
+				v3 BiTangent = Normalize(C * (dUV0.x * E1 - dUV1.x * E0));
+
+				Mesh->Tangents[TriangleIndex + 0] = Tangent;
+				Mesh->Tangents[TriangleIndex + 1] = Tangent;
+				Mesh->Tangents[TriangleIndex + 2] = Tangent;
+
+				Mesh->BiTangents[TriangleIndex + 0] = BiTangent;
+				Mesh->BiTangents[TriangleIndex + 1] = BiTangent;
+				Mesh->BiTangents[TriangleIndex + 2] = BiTangent;
+			}
+
+		}
+#endif
 	}
 
 	return(Model);

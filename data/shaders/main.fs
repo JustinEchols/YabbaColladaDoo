@@ -1,28 +1,44 @@
 #version 430 core
 
+in vec3 TangentP;
+in vec3 TangentLightP;
+in vec3 TangentCameraP;
 in vec3 SurfaceP;
 in vec3 SurfaceN;
+in vec3 LightP;
+in vec3 CameraP;
 in vec2 UV;
 
 uniform bool UsingTexture;
 uniform sampler2D DiffuseTexture;
 uniform sampler2D SpecularTexture;
+uniform sampler2D NormalTexture;
 
 uniform vec3 Ambient;
 uniform vec4 Diffuse;
 uniform vec4 Specular;
-
-uniform vec3 CameraP;
-uniform vec3 LightP;
 uniform vec3 LightColor;
 
 out vec4 Result;
 void main()
 {
-	vec3 SurfaceToLight = LightP - SurfaceP;
-	vec3 SurfaceToCamera = CameraP - SurfaceP;
+	vec3 SurfaceToLight = vec3(0.0);
+	vec3 SurfaceToCamera = vec3(0.0);
+	vec3 N = vec3(0.0);
+	if(UsingTexture)
+	{
+		SurfaceToLight = TangentLightP - TangentP;
+		SurfaceToCamera = TangentCameraP - TangentP;
+		vec3 Normal = texture(NormalTexture, UV).rgb;
+		N = normalize(2.0 * Normal - vec3(1.0));
+	}
+	else
+	{
+		SurfaceToLight = LightP - SurfaceP;
+		SurfaceToCamera = CameraP - SurfaceP;
+		N = normalize(SurfaceN);
+	}
 
-	vec3 N = normalize(SurfaceN);
 	vec3 SurfaceToLightNormalized = normalize(SurfaceToLight);
 	vec3 SurfaceToCameraNormalized = normalize(SurfaceToCamera);
 	vec3 ReflectedDirection = reflect(-SurfaceToCameraNormalized, N);

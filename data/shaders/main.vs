@@ -15,7 +15,12 @@ layout (location = 2) in vec2 Tex;
 layout (location = 3) in uint JointCount;
 layout (location = 4) in uvec3 JointTransformIndices;
 layout (location = 5) in vec3 Weights;
+layout (location = 6) in vec3 Tangent;
+layout (location = 7) in vec3 BiTangent;
 
+uniform bool UsingTexture;
+uniform vec3 LightPosition;
+uniform vec3 CameraPosition;
 uniform mat4 Model;
 uniform mat4 View;
 uniform mat4 Projection;
@@ -23,8 +28,13 @@ uniform mat4 Projection;
 #define MAX_JOINT_COUNT 100
 uniform mat4 Transforms[MAX_JOINT_COUNT];
 
+out vec3 TangentP;
+out vec3 TangentLightP;
+out vec3 TangentCameraP;
 out vec3 SurfaceP;
 out vec3 SurfaceN;
+out vec3 LightP;
+out vec3 CameraP;
 out vec2 UV;
 
 void main()
@@ -43,8 +53,33 @@ void main()
 		}
 	}
 
+	TangentP = vec3(0.0);
+	TangentLightP = vec3(0.0);
+	TangentCameraP = vec3(0.0);
+	SurfaceP = vec3(0.0);
+	SurfaceN = vec3(0.0);
+	LightP = vec3(0.0);
+	CameraP = vec3(0.0);
+	mat3 NormalMatrix = transpose(inverse(mat3(Model)));
+
+	if(UsingTexture)
+	{
+		vec3 T = normalize(NormalMatrix * Tangent);
+		vec3 B = normalize(NormalMatrix * BiTangent);
+		vec3 N = normalize(NormalMatrix * Norm.xyz);
+		mat3 TBN = transpose(mat3(T, B, N));
+		TangentP = TBN * vec3(Model * Pos);
+		TangentLightP = TBN * LightPosition;
+		TangentCameraP = TBN * CameraPosition;
+	}
+	else
+	{
+		SurfaceP = vec3(Model * Pos);
+		SurfaceN = vec3(transpose(inverse(Model)) * Norm);
+		LightP = LightPosition;
+		CameraP = CameraPosition;
+	}
+
 	gl_Position = Projection * View * Model * Pos;
-	SurfaceP = vec3(Model * Pos);
-	SurfaceN = vec3(transpose(inverse(Model)) * Norm);
 	UV = Tex;
 }

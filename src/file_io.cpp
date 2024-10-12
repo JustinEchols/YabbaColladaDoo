@@ -1,20 +1,4 @@
 
-internal void
-FileWriteStringAndNewLine(FILE *OpenFile, string S)
-{
-	Assert(OpenFile);
-	fputs((char *)S.Data, OpenFile);
-	fputs("\n", OpenFile);
-}
-
-internal void
-FileWriteStringAndNewLine(FILE *OpenFile, char *S)
-{
-	Assert(OpenFile);
-	fputs(S, OpenFile);
-	fputs("\n", OpenFile);
-}
-
 internal s32
 FileSizeGet(FILE *OpenFile)
 {
