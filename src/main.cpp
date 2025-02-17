@@ -1,11 +1,13 @@
 
 /*
  TODO(Justin):
+
+ [] Get constants used for describing materials even if a texture is being used
  [] Use temporary memory when loading models
+ [] Fix camera movement 
  [?] Separate skeleton/armature from each mesh. A mesh may be affected by a subset of the entire
 	skeleton. We can store the entire skeleton at the model level and update the skeleton each frame
 	then the joint transforms / model transforms of each mesh need to be updated.
- [] Fix simple textured quads
  [] opengl error logging/checking!  
  [?] fonts 
  [?] imgui 
@@ -13,15 +15,9 @@
  [?] asset file structure 
  [?] Add tangents and BiTangents to asset mesh file
  [] Average tangents and BiTangents when model loading 
- [X] Transform normals via joint transforms!  
- [X] Get the correct normal when using a normal map AND doing skeletal animation
  [] File paths from build directory
- [X] Simple animation file format 
  [X] Test different models.
 	 [] Test different models++.
- [X] Instead of storing mat4's for animation, store pos, quat, scale and construct for both key frame and model
- [X] Check UV mapping 
- [X] Phong lighting 
  [?] Diffuse, ambient, specular, and normal textures in file format 
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
  [?] Remove strtok_s
@@ -439,7 +435,7 @@ int main(int Argc, char **Argv)
 
 	char *XBotAnimations[] =
 	{
-		"models\\XBot\\animationsXBot_ActionIdle.animation",
+		"models\\XBot\\animations\\XBot_ActionIdle.animation",
 	};
 	char *PaladinAnimations[] =
 	{
@@ -586,9 +582,6 @@ int main(int Argc, char **Argv)
 	OpenGLAllocateAnimatedModel(&GameState->Paladin, Shaders[0].Handle);
 	AllocateModelTextures(&GameState->Paladin);
 
-	OpenGLAllocateAnimatedModel(&GameState->Vampire, Shaders[0].Handle);
-	AllocateModelTextures(&GameState->Vampire);
-
 	OpenGLAllocateAnimatedModel(&GameState->Maria, Shaders[0].Handle);
 	AllocateModelTextures(&GameState->Maria);
 
@@ -603,13 +596,12 @@ int main(int Argc, char **Argv)
 	OpenGLAllocateModel(&GameState->Cube, Shaders[1].Handle);
 	AllocateModelTextures(&GameState->Cube);
 
+	ErikaArcherAdd(GameState);
 	PlayerAdd(GameState);
-	VampireAdd(GameState);
-	LightAdd(GameState);
 	PaladinAdd(GameState);
 	MariaAdd(GameState);
 	BruteAdd(GameState);
-	ErikaArcherAdd(GameState);
+	LightAdd(GameState);
 
 	f32 StartTime = 0.0f;
 	f32 EndTime = 0.0f;
@@ -641,7 +633,6 @@ int main(int Argc, char **Argv)
 		{
 			NewInput->Buttons[ButtonIndex].EndedDown = OldInput->Buttons[ButtonIndex].EndedDown;
 		}
-
 
 		glfwPollEvents();
 
