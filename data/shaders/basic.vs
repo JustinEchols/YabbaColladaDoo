@@ -9,12 +9,14 @@ uniform mat4 Model;
 uniform mat4 View;
 uniform mat4 Projection;
 
-uniform bool UsingTexture;
+uniform bool UsingNormal;
 uniform vec3 LightP;
 
 out vec3 N;
 out vec3 TangentP;
 out vec3 TangentLightP;
+out vec3 LightPos;
+out vec3 SurfaceP;
 out vec2 UV;
 
 void main()
@@ -23,7 +25,7 @@ void main()
 	TangentP = vec3(0.0);
 	TangentLightP = vec3(0.0);
 	mat3 NormalMatrix = transpose(inverse(mat3(Model)));
-	if(UsingTexture)
+	if(UsingNormal)
 	{
 		vec3 T = normalize(NormalMatrix * Tangent);
 		vec3 B = normalize(NormalMatrix * BiTangent);
@@ -39,4 +41,6 @@ void main()
 
 	gl_Position = Projection * View * Model * vec4(P, 1.0);
 	UV = Tex;
+	LightPos = LightP;
+	SurfaceP = vec3(View*Model*vec4(P, 1.0));
 }

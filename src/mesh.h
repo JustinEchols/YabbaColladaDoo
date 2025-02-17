@@ -8,8 +8,8 @@
 struct joint_info
 {
 	u32 Count;
-	u32 JointIndex[3];
-	f32 Weights[3];
+	u32 JointIndex[4];
+	f32 Weights[4];
 };
 
 struct joint
@@ -38,6 +38,8 @@ struct material_spec
 	f32 Shininess;
 };
 
+
+
 enum material_flags
 {
 	MaterialFlag_Ambient = (1 << 1),
@@ -46,22 +48,22 @@ enum material_flags
 	MaterialFlag_Normal = (1 << 4),
 };
 
+// TODO(Justin): Mesh material info!
 struct mesh
 {
 	string Name;
 
 	u32 IndicesCount;
-	u32 VertexCount;
-	u32 JointCount;
-
 	u32 *Indices;
+
+	u32 VertexCount;
 	vertex *Vertices;
 
 	v3 *Tangents;
 	v3 *BiTangents;
 
-	joint *Joints;
-
+	u32 JointCount;
+	string *JointNames;
 	mat4 BindTransform;
 	mat4 *InvBindTransforms;
 	mat4 *JointTransforms;
@@ -74,23 +76,45 @@ struct mesh
 	u32 DiffuseTexture;
 	u32 SpecularTexture;
 	u32 NormalTexture;
+
+	// TODO(Justin): Use textures as part of model itself
+
+	// Old file format uses joints per mesh
+	joint *Joints;
+};
+
+struct skeleton
+{
+	u32 JointCount;
+	joint *Joints;
+	mat4 *JointTransforms;
+	mat4 *ModelSpaceTransforms;
 };
 
 struct model
 {
+	string FullPath;
+
 	b32 HasSkeleton;
 
 	u32 MeshCount;
 	mesh *Meshes;
 
 	// TODO(Justin): Should this be stored at the mesh level?
-	u32 VA[4];
-	u32 VB[4];
-	u32 IBO[4];
-	u32 TangentVB[4];
-	u32 BiTangentVB[4];
+	u32 VA[16];
+	u32 VB[16];
+	u32 IBO[16];
+	u32 TangentVB[16];
+	u32 BiTangentVB[16];
 
+	skeleton Skeleton;
+
+	// For testing only!
 	animation Animations;
+
+	u32 TextureCount;
+	texture Textures[32];
+	//texture *Textures;
 };
 
 

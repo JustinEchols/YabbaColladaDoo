@@ -5,9 +5,16 @@ struct memory_arena
 	u8 *Base;
 	memory_index Size;
 	memory_index Used;
+	s32 TempCount;
 };
 
-internal void
+struct temporary_memory
+{
+	memory_arena *Arena;
+	memory_index Used;
+};
+
+inline void
 ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
 {
 	Arena->Base = Base;
@@ -15,7 +22,7 @@ ArenaInitialize(memory_arena *Arena, u8 *Base, memory_index Size)
 	Arena->Used = 0;
 }
 
-internal void *
+inline void *
 PushSize_(memory_arena *Arena, memory_index Size)
 {
 	Assert((Arena->Used + Size) <= Arena->Size);
@@ -26,7 +33,7 @@ PushSize_(memory_arena *Arena, memory_index Size)
 	return(Result);
 }
 
-internal void *
+inline void *
 MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 {
 	u8 *Src = (u8 *)SrcInit;
@@ -36,14 +43,37 @@ MemoryCopy(memory_index Size, void *SrcInit, void *DestInit)
 	return(DestInit);
 }
 
-internal void
-MemoryZero(memory_index Size, void *Src)
+inline void
+MemoryZero(void *Src, memory_index Size)
 {
 	u8 *P = (u8 *)Src;
 	while(Size--)
 	{
 		*P++ = 0;
 	}
+}
+
+inline temporary_memory
+TemporaryMemoryBegin(memory_arena *Arena)
+{
+	temporary_memory Result;
+
+	Result.Arena = Arena;
+	Result.Used = Arena->Used;
+
+	Arena->TempCount++;
+
+	return(Result);
+}
+
+inline void
+TemporaryMemoryEnd(temporary_memory TempMemory)
+{
+	memory_arena *Arena = TempMemory.Arena;
+	Assert(Arena->Used >= TempMemory.Used);
+	Arena->Used = TempMemory.Used;
+	Assert(Arena->TempCount > 0);
+	Arena->TempCount--;
 }
 
 #define MEMORY_H

@@ -31,6 +31,7 @@ internal xml_attribute
 NodeAttributeGet(xml_node *Node, char *AttrName)
 {
 	xml_attribute Result = {};
+
 	string Name = String((u8 *)AttrName);
 	for(s32 Index = 0; Index < Node->AttributeCount; ++Index)
 	{
@@ -48,10 +49,8 @@ internal string
 NodeAttributeValueGet(xml_node *Node, char *AttrName)
 {
 	string Result = {};
-
 	xml_attribute Attr = NodeAttributeGet(Node, AttrName);
 	Result = Attr.Value;
-
 	return(Result);
 }
 
@@ -90,6 +89,212 @@ NodeGet(xml_node *Root, xml_node *N, char *TagName, char *ID = 0)
 		}
 	}
 }
+
+internal void
+NodeGetWithType(xml_node *Root, xml_node *Dest, char *TagName, char *Type)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		if(Dest->Tag.Size == 0)
+		{
+			xml_node *Node = Root->Children[Index];
+			Assert(Node);
+			if(StringsAreSame(Node->Tag, TagName))
+			{
+				for(s32 AttributeIndex = 0; AttributeIndex < Node->AttributeCount; ++AttributeIndex)
+				{
+					xml_attribute *Attr = Node->Attributes + AttributeIndex;
+					if(StringsAreSame(Attr->Value, Type))
+					{
+						*Dest = *Node;
+					}
+				}
+			}
+
+			if(*Node->Children)
+			{
+				NodeGetWithType(Node, Dest, TagName, Type);
+			}
+		}
+		else
+		{
+			break;
+		}
+	}
+}
+
+internal void
+NodeCountAllChildrenOfType(xml_node *Root, char *TagName, char *Type, u32 *DestCount)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		Assert(Node);
+		if(StringsAreSame(Node->Tag, TagName))
+		{
+			for(s32 AttributeIndex = 0; AttributeIndex < Node->AttributeCount; ++AttributeIndex)
+			{
+				xml_attribute *Attr = Node->Attributes + AttributeIndex;
+				if(StringsAreSame(Attr->Value, Type))
+				{
+					(*DestCount)++;
+				}
+			}
+		}
+
+		if(*Node->Children)
+		{
+			NodeCountAllChildrenOfType(Node, TagName, Type, DestCount);
+		}
+	}
+}
+
+internal void
+NodeGetAllSIDValues(memory_arena *Arena, xml_node *Root, string *DestSIDs, u32 *DestIndex)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		Assert(Node);
+		if(StringsAreSame(Node->Tag, "node"))
+		{
+			for(s32 AttributeIndex = 0; AttributeIndex < Node->AttributeCount; ++AttributeIndex)
+			{
+				xml_attribute *Attr = Node->Attributes + AttributeIndex;
+				if(StringsAreSame(Attr->Key, "sid"))
+				{
+
+					string *SID = DestSIDs + (*DestIndex);
+					*SID = StringAllocAndCopy(Arena, Attr->Value);
+					(*DestIndex)++;
+				}
+			}
+		}
+
+		if(*Node->Children)
+		{
+			NodeGetAllSIDValues(Arena, Node, DestSIDs, DestIndex);
+		}
+	}
+}
+
+
+
+internal void
+GetTextures(memory_arena *Arena, xml_node *LibImages, xml_node *Root, model *Model, mesh *Mesh)
+{
+	Assert(StringsAreSame(LibImages->Tag, "library_images"));
+
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		if(StringsAreSame(Node->Tag, "init_from"))
+		{
+			string TextureNodeName = Node->InnerText;
+			xml_node TextureNode = {};
+			NodeGet(LibImages, &TextureNode, "image", CString(TextureNodeName));
+			string TextureRelPath = TextureNode.Children[0]->InnerText;
+
+			char FileNameBuffer[256];
+			MemoryZero(FileNameBuffer, sizeof(FileNameBuffer));
+			GetFileName(FileNameBuffer, TextureRelPath);
+
+			char PathToModel[256];
+			MemoryZero(PathToModel, sizeof(PathToModel));
+			GetPathToFile(PathToModel, Model->FullPath);
+
+			char PathToTexture[256];
+			MemoryZero(PathToTexture, sizeof(PathToTexture));
+
+			strcat(PathToTexture, PathToModel);
+			strcat(PathToTexture, "textures\\");
+			strcat(PathToTexture, FileNameBuffer);
+
+			b32 Found = false;
+			u32 FoundTextureIndex = 0;
+			for(u32 TextureIndex = 0; TextureIndex < Model->TextureCount; ++TextureIndex)
+			{
+				texture *Texture = Model->Textures + TextureIndex;
+				if(StringsAreSame(Texture->FileName, FileNameBuffer))
+				{
+					Found = true;
+					FoundTextureIndex = TextureIndex;
+					break;
+				}
+			}
+
+			u32 TextureIndex = 0;
+			if(!Found)
+			{
+				texture *Texture = Model->Textures + Model->TextureCount;
+				*Texture = TextureLoad(Arena, PathToTexture);
+				TextureIndex = Model->TextureCount;
+				Model->TextureCount++;
+			}
+			else
+			{
+				TextureIndex = FoundTextureIndex;
+			}
+
+			if(SubStringExists(PathToTexture, "diffuse"))
+			{
+				Mesh->DiffuseTexture = TextureIndex;
+				Mesh->MaterialFlags |= MaterialFlag_Diffuse;
+			}
+			else if(SubStringExists(PathToTexture, "specular"))
+			{
+				Mesh->SpecularTexture = TextureIndex;
+				Mesh->MaterialFlags |= MaterialFlag_Specular;
+			}
+			else if(SubStringExists(PathToTexture, "normal"))
+			{
+				Mesh->NormalTexture = TextureIndex;
+				Mesh->MaterialFlags |= MaterialFlag_Normal;
+			}
+		}
+
+		if(*Node->Children)
+		{
+			GetTextures(Arena, LibImages, Node, Model, Mesh);
+		}
+	}
+}
+
+internal void
+CountAllChildren(xml_node *Root, u32 *Count)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		Assert(Node);
+		(*Count)++;
+		if(*Node->Children)
+		{
+			CountAllChildren(Node, Count);
+		}
+	}
+}
+
+internal void
+CountAllChildrenWithName(xml_node *Root, char *Name, u32 *Count)
+{
+	for(s32 Index = 0; Index < Root->ChildrenCount; ++Index)
+	{
+		xml_node *Node = Root->Children[Index];
+		Assert(Node);
+		if(StringsAreSame(Node->Tag, Name))
+		{
+			(*Count)++;
+		}
+
+		if(*Node->Children)
+		{
+			CountAllChildrenWithName(Node, Name, Count);
+		}
+	}
+}
+
+
 
 internal xml_node
 NodeSourceGet(xml_node *Root, char *TagName, char *ID)
@@ -213,7 +418,8 @@ ParseColladaStringArray(memory_arena *Arena, xml_node *Root, string **Dest, u32 
 	*DestCount  = U32FromASCII(Count.Data);
 	*Dest = PushArray(Arena, *DestCount, string);
 
-	ParseStringArray(Arena, *Dest, *DestCount, TargetNode.InnerText);
+	//ParseStringArray(Arena, *Dest, *DestCount, TargetNode.InnerText);
+	ParseStringArray(Arena, *Dest, TargetNode.InnerText);
 }
 
 internal void
@@ -262,132 +468,132 @@ ColladaFileLoad(memory_arena *Arena, char *FileName)
 	loaded_dae Result = {};
 
 	FILE *FileHandle = fopen(FileName, "r");
-	if(FileHandle)
+	if(!FileHandle)
 	{
-		s32 Size = FileSizeGet(FileHandle);
-		if(Size != -1)
+		printf("ERROR: Could not open file %s\n", FileName);
+		perror("");
+		Assert(0);
+	}
+
+	s32 Size = FileSizeGet(FileHandle);
+	if(Size == -1)
+	{
+		printf("ERROR: Could not open file %s\n", FileName);
+		perror("");
+		Assert(0);
+	}
+
+	u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
+	FileReadEntireAndNullTerminate(Content, Size, FileHandle);
+	if(FileClose(FileHandle))
+	{
+		Result.FullPath = StringAllocAndCopy(Arena, FileName);
+
+		//
+		// NOTE(Justin): Skip to the <COLLADA> node.
+		//
+
+		char Buffer[512];
+		s32 InnerTextIndex = 0;
+		s32 Index = 0;
+		while(!SubStringExists(Buffer, "COLLADA"))
+		{	
+			Buffer[InnerTextIndex++] = Content[Index++];
+			Buffer[InnerTextIndex] = '\0';
+		}
+
+		InnerTextIndex = 0;
+		Index -= ((s32)strlen("<COLLADA") + 1);
+
+
+		char TagDelimeters[] = "<>";
+		char InnerTagDelimeters[] = "=\"";
+		u32 DelimeterCount = ArrayCount(TagDelimeters);
+
+		string Data = String((u8 *)(Content + Index));
+		string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, DelimeterCount);
+
+		string_node *Token = List.First;
+		Token = Token->Next;
+
+		Result.Root = PushXMLNode(Arena, 0);
+		xml_node *CurrentNode = Result.Root;
+
+		CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+		Token = Token->Next;
+		CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+		CurrentNode->ChildrenCount = 0;
+
+		while(Token->Next)
 		{
-			u8 *Content = (u8 *)calloc(Size + 1, sizeof(u8));
-			FileReadEntireAndNullTerminate(Content, Size, FileHandle);
-			if(FileClose(FileHandle))
+			Token = Token->Next;
+			if(Token->String.Data[0] == '/')
 			{
-				Result.FullPath = StringAllocAndCopy(Arena, FileName);
-
-				//
-				// NOTE(Justin): Skip to the <COLLADA> node.
-				//
-
-				char Buffer[512];
-				s32 InnerTextIndex = 0;
-				s32 Index = 0;
-				while(!SubStringExists(Buffer, "COLLADA"))
-				{	
-					Buffer[InnerTextIndex++] = Content[Index++];
-					Buffer[InnerTextIndex] = '\0';
-				}
-
-				InnerTextIndex = 0;
-				Index -= ((s32)strlen("<COLLADA") + 1);
-
-
-				char TagDelimeters[] = "<>";
-				char InnerTagDelimeters[] = "=\"";
-				u32 DelimeterCount = ArrayCount(TagDelimeters);
-
-				string Data = String((u8 *)(Content + Index));
-				string_list List = StringSplit(Arena, Data, (u8 *)TagDelimeters, DelimeterCount);
-
-				string_node *Token = List.First;
-				Token = Token->Next;
-
-				Result.Root = PushXMLNode(Arena, 0);
-				xml_node *CurrentNode = Result.Root;
-
-				CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
-				Token = Token->Next;
-				CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
-
-				while(Token->Next)
+				if(CurrentNode->Parent)
 				{
+					CurrentNode = CurrentNode->Parent;
 					Token = Token->Next;
-					if(Token->String.Data[0] == '/')
-					{
-						if(CurrentNode->Parent)
-						{
-							CurrentNode = CurrentNode->Parent;
-							Token = Token->Next;
-						}
-						else
-						{
-							break;
-						}
-					}
-					else
-					{
-						CurrentNode = ChildNodeAdd(Arena, CurrentNode);
+				}
+				else
+				{
+					break;
+				}
+			}
+			else
+			{
+				CurrentNode = ChildNodeAdd(Arena, CurrentNode);
 
-						if(NodeHasKeysValues(Token->String) && StringEndsWith(Token->String, '/'))
-						{
-							string AtSpace = StringSearchFor(Token->String, ' ');
-							u64 CopySize = (Token->String.Size - AtSpace.Size);
-							string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
-							CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
+				if(NodeHasKeysValues(Token->String) && StringEndsWith(Token->String, '/'))
+				{
+					string AtSpace = StringSearchFor(Token->String, ' ');
+					u64 CopySize = (Token->String.Size - AtSpace.Size);
+					string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
+					CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
 
-							string Temp = AtSpace;
-							Temp.Data++;
-							Temp.Size--;
+					string Temp = AtSpace;
+					Temp.Data++;
+					Temp.Size--;
 
-							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
+					NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
 
-							Token = Token->Next;
-							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
-							CurrentNode = CurrentNode->Parent;
-						}
-						else if(NodeHasKeysValues(Token->String))
-						{
-							string AtSpace = StringSearchFor(Token->String, ' ');
-							u64 CopySize = (Token->String.Size - AtSpace.Size);
-							string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
-							CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
+					Token = Token->Next;
+					CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+					CurrentNode = CurrentNode->Parent;
+				}
+				else if(NodeHasKeysValues(Token->String))
+				{
+					string AtSpace = StringSearchFor(Token->String, ' ');
+					u64 CopySize = (Token->String.Size - AtSpace.Size);
+					string ToCopy = StringFromRange(Token->String.Data, Token->String.Data + CopySize);
+					CurrentNode->Tag = StringAllocAndCopy(Arena, ToCopy);
 
-							string Temp = AtSpace;
-							Temp.Data++;
-							Temp.Size--;
+					string Temp = AtSpace;
+					Temp.Data++;
+					Temp.Size--;
 
-							NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
+					NodeProcessKeysValues(Arena, CurrentNode, Temp, InnerTagDelimeters, DelimeterCount);
 
-							Token = Token->Next;
-							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
-						}
-						else if(StringEndsWith(Token->String, '/'))
-						{
-							CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
-							Token = Token->Next;
-							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
-							CurrentNode = CurrentNode->Parent;
-						}
-						else
-						{
-							CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
-							Token = Token->Next;
-							CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
-						}
-					}
+					Token = Token->Next;
+					CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+				}
+				else if(StringEndsWith(Token->String, '/'))
+				{
+					CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+					Token = Token->Next;
+					CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
+					CurrentNode = CurrentNode->Parent;
+				}
+				else
+				{
+					CurrentNode->Tag = StringAllocAndCopy(Arena, Token->String);
+					Token = Token->Next;
+					CurrentNode->InnerText = StringAllocAndCopy(Arena, Token->String);
 				}
 			}
 		}
-		else
-		{
-			printf("Error file %s has size %d\n", FileName, Size);
-		}
+	}
 
-		fclose(FileHandle);
-	}
-	else
-	{
-		printf("Error opening file %s\n", FileName);
-		perror("");
-	}
+	fclose(FileHandle);
 
 	return(Result);
 }

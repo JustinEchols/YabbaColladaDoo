@@ -10,6 +10,10 @@ in vec3 CameraP;
 in vec2 UV;
 
 uniform bool UsingTexture;
+uniform bool UsingDiffuse;
+uniform bool UsingSpecular;
+uniform bool UsingNormal;
+
 uniform sampler2D DiffuseTexture;
 uniform sampler2D SpecularTexture;
 uniform sampler2D NormalTexture;
@@ -25,7 +29,7 @@ void main()
 	vec3 SurfaceToLight = vec3(0.0);
 	vec3 SurfaceToCamera = vec3(0.0);
 	vec3 N = vec3(0.0);
-	if(UsingTexture)
+	if(UsingNormal)
 	{
 		SurfaceToLight = TangentLightP - TangentP;
 		SurfaceToCamera = TangentCameraP - TangentP;
@@ -48,14 +52,23 @@ void main()
 
 	vec3 MaterialDiffuse = vec3(0.0);
 	vec3 MaterialSpecular = vec3(0.0);
-	if(UsingTexture)
+	if(UsingDiffuse)
 	{
 		MaterialDiffuse = D * LightColor * texture(DiffuseTexture, UV).rgb;
-		MaterialSpecular = S * LightColor * texture(SpecularTexture, UV).rgb;
+
 	}
 	else
 	{
 		MaterialDiffuse = D * LightColor * Diffuse.xyz;
+
+	}
+
+	if(UsingSpecular)
+	{
+		MaterialSpecular = S * LightColor * texture(SpecularTexture, UV).rgb;
+	}
+	else
+	{
 		MaterialSpecular = S * LightColor * Specular.xyz;
 	}
 

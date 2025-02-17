@@ -1,0 +1,1108 @@
+9/28/2024
+
+#if 0
+internal void
+ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFileName)
+{
+	FILE *OutputFile = fopen(OutputFileName, "w");
+	if(OutputFile)
+	{
+		xml_node *Root = DaeFile.Root;
+		xml_node LibAnimations = {};
+		NodeGet(Root, &LibAnimations, "library_animations");
+		if(LibAnimations.ChildrenCount != 0)
+		{
+			u8 Delimeters[] = " \n\r";
+
+			if(LibAnimations.ChildrenCount == 1)
+			{
+				LibAnimations = *LibAnimations.Children[0];
+			}
+			u32 JointCount = LibAnimations.ChildrenCount;
+
+			xml_node FloatArray = {};
+			NodeGet(&LibAnimations, &FloatArray, "float_array");
+			string StrTimeCount = NodeAttributeValueGet(&FloatArray, "count");
+
+			animation_info Info = {};
+			Info.JointCount = JointCount;
+			Info.JointNames = PushArray(Arena, Info.JointCount, string);
+
+			u32 TimeCount = U32FromASCII(StrTimeCount);
+			f32 *Times = PushArray(Arena, TimeCount, f32);
+
+			u32 TransformCount = Info.JointCount;
+			mat4 **Transforms = PushArray(Arena, TransformCount, mat4 *);
+			//Info.KeyFrameCount = Info.TimeCount;
+			Info.KeyFrameCount = Info.TimeCount;
+			Info.KeyFrames = PushArray(Arena, Info.KeyFrameCount, key_frame);
+
+			for(u32 Index = 0; Index < TransformCount; ++Index)
+			{
+				Transforms[Index] = PushArray(Arena, Info.TimeCount, mat4);
+			}
+
+			for(u32 Index = 0; Index < Info.KeyFrameCount; ++Index)
+			{
+				Info.KeyFrames[Index].Transforms = PushArray(Arena, Info.JointCount, mat4);
+			}
+
+			for(s32 ChildIndex = 0; ChildIndex < LibAnimations.ChildrenCount; ++ChildIndex)
+			{
+				xml_node *Node = LibAnimations.Children[ChildIndex];
+				Assert(StringsAreSame(Node->Tag, "animation"));
+
+				string JointName = NodeAttributeValueGet(Node, "name");
+
+				Info.JointNames[ChildIndex] = JointName;
+
+				xml_node Sampler = *Node->Children[Node->ChildrenCount - 2];
+				xml_node Input = *Sampler.Children[0];
+				xml_node Output = *Sampler.Children[1];
+
+				string InputSrcName = NodeAttributeValueGet(&Input, "source");
+				string OutputSrcName = NodeAttributeValueGet(&Output, "source");
+
+				InputSrcName.Data++;
+				OutputSrcName.Data++;
+
+				InputSrcName.Size--;
+				OutputSrcName.Size--;
+
+				xml_node N = {};
+#if 0
+
+				NodeGet(Node, &N, "source", (char *)InputSrcName.Data);
+				N = *N.Children[0];
+
+				string Count = NodeAttributeValueGet(&N, "count");
+
+				u32 NodeTimeCount = U32FromASCII(Count.Data);
+				Assert(Info.TimeCount == NodeTimeCount);
+				Assert(Info.TransformCount == NodeTimeCount);
+
+
+#endif
+
+				N = {};
+				NodeGet(Node, &N, "source", (char *)OutputSrcName.Data);
+				N = *N.Children[0];
+
+				string_list TransformList = StringSplit(Arena, N.InnerText, (u8 *)Delimeters, 3);
+				string_node *StrNode = TransformList.First;
+
+				mat4 *M = Transforms[ChildIndex];
+				f32 *Float = (f32 *)M;
+				for(u32 Index = 0; Index < TransformList.Count; ++Index)
+				{
+					string S = StringAllocAndCopy(Arena, StrNode->String);
+					Float[Index] = F32FromASCII(S);
+					StrNode = StrNode->Next;
+				}
+			}
+
+			for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
+			{
+				key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
+				for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+				{
+					KeyFrame->Transforms[JointIndex] = Transforms[JointIndex][KeyFrameIndex];
+				}
+			}
+
+			string StrJointCount = DigitToString(Arena, Info.JointCount);
+			fputs("JOINTS: ", OutputFile);
+			fputs((char *)StrJointCount.Data, OutputFile);
+			fputs("\n", OutputFile);
+			for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+			{
+				string *JointName = Info.JointNames + JointIndex;
+				fputs((char *)JointName->Data, OutputFile);
+				fputs("\n", OutputFile);
+			}
+
+			fputs("TIMES: ", OutputFile);
+			fputs((char *)StrTimeCount.Data, OutputFile);
+			fputs("\n", OutputFile);
+			string_list TimeList = StringSplit(Arena, FloatArray.InnerText, Delimeters, ArrayCount(Delimeters));
+			string_node *StrNode = TimeList.First;
+			for(u32 Index = 0; Index < TimeList.Count; ++Index)
+			{
+				string S = StringAllocAndCopy(Arena, StrNode->String);
+				char *Cstr = (char *)S.Data;
+				fputs(Cstr, OutputFile);
+				fputs(" ", OutputFile);
+				StrNode = StrNode->Next;
+			}
+			fputs("\n", OutputFile);
+
+			for(u32 KeyFrameIndex = 0; KeyFrameIndex < Info.KeyFrameCount; ++KeyFrameIndex)
+			{
+				string Index = DigitToString(Arena, KeyFrameIndex);
+				fputs("KEY_FRAME: ", OutputFile);
+				fputs((char *)Index.Data, OutputFile);
+				fputs("\n", OutputFile);
+
+				key_frame *KeyFrame = Info.KeyFrames + KeyFrameIndex;
+				for(u32 JointIndex = 0; JointIndex < Info.JointCount; ++JointIndex)
+				{
+					mat4 *JointTransform = KeyFrame->Transforms + JointIndex;
+
+					affine_decomposition D = Mat4AffineDecomposition(*JointTransform);
+
+					quaternion Q = RotationToQuaternion(D.R);
+
+					string_array StrP = F32ArrayToStringArray(Arena, (f32 *)&D.P, 3);
+					string_array StrQ = F32ArrayToStringArray(Arena, (f32 *)&Q, 4);
+					for(u32 StrIndex = 0; StrIndex < StrP.Count; ++StrIndex)
+					{
+						string *S = StrP.Strings + StrIndex;
+						fputs((char *)S->Data, OutputFile);
+						fputs(" ", OutputFile);
+					}
+					fputs("\n", OutputFile);
+
+					for(u32 StrIndex = 0; StrIndex < StrQ.Count; ++StrIndex)
+					{
+						string *S = StrQ.Strings + StrIndex;
+						fputs((char *)S->Data, OutputFile);
+						fputs(" ", OutputFile);
+					}
+					fputs("\n", OutputFile);
+
+					string Cx = F32ToString(Arena, D.Cx);
+					string Cy = F32ToString(Arena, D.Cy);
+					string Cz = F32ToString(Arena, D.Cz);
+
+					fputs((char *)Cx.Data, OutputFile);
+					fputs(" ", OutputFile);
+					fputs((char *)Cy.Data, OutputFile);
+					fputs(" ", OutputFile);
+					fputs((char *)Cz.Data, OutputFile);
+					fputs(" ", OutputFile);
+
+					fputs("\n", OutputFile);
+					fputs("\n", OutputFile);
+				}
+				fputs("\n", OutputFile);
+			}
+		}
+		else
+		{
+			printf("library_animations not found!.");
+		}
+	}
+	else
+	{
+		perror("Could not open file");
+	}
+}
+#else
+
+internal void 
+ConvertMeshFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFileName)
+{
+	FILE *OutputFile = fopen(OutputFileName, "w");
+	if(OutputFile)
+	{
+		xml_node *Root = DaeFile.Root;
+
+		xml_node LibMaterials = {};
+		xml_node LibEffects = {};
+		xml_node LibGeometry = {};
+		xml_node LibControllers= {};
+		xml_node LibVisScenes = {};
+		xml_node Triangles = {};
+
+		NodeGet(Root, &LibMaterials, "library_materials");
+		NodeGet(Root, &LibEffects, "library_effects");
+		NodeGet(Root, &LibGeometry, "library_geometries");
+		NodeGet(Root, &LibControllers, "library_controllers");
+		NodeGet(Root, &LibVisScenes, "library_visual_scenes");
+
+		if(LibGeometry.ChildrenCount == 0)
+		{
+			Assert("ERROR: Node <library_geometries> does not have child nodes");
+		}
+
+		b32 HasSkeleton = true;
+		if(LibControllers.ChildrenCount == 0)
+		{
+			HasSkeleton = false;
+		}
+
+		//
+		// NOTE(Justin): The number of meshes is the number of children that
+		// library_geometries has. Each geometry node has AT MOST one mesh child
+		// node. The LAST CHILD NODE of a mesh node contains two things. A)
+		// Where to find positions, normals, UVs, colors and B) The indices of the
+		// mesh.
+		//
+
+		u32 MeshCount = LibGeometry.ChildrenCount;
+		string StrMeshCount = DigitToString(Arena, MeshCount);
+		FileWriteHeader(OutputFile, "mesh_count", StrMeshCount);
+
+		for(u32 MeshIndex = 0; MeshIndex < MeshCount; ++MeshIndex)
+		{
+			xml_node *Geometry = LibGeometry.Children[MeshIndex];
+
+			string MeshName = NodeAttributeValueGet(Geometry, "name");
+
+			b32 HasPhongLighting = false;
+
+			if(LibMaterials.ChildrenCount == 0)
+			{
+				Assert("ERROR: Node <library_materials> does not have child nodes.");
+			}
+
+			xml_node *Mat = LibMaterials.Children[MeshIndex];
+			string EffectNodeName = NodeAttributeValueGet(Mat->Children[0], "url");
+			EffectNodeName.Data++;
+			EffectNodeName.Size--;
+
+			xml_node EffectNode = {};
+			xml_node Phong = {};
+			NodeGet(Root, &EffectNode, "effect", (char *)EffectNodeName.Data);
+			NodeGet(&EffectNode, &Phong, "phong");
+
+			if(Phong.ChildrenCount == 0)
+			{
+				Assert("ERROR: Node <phong> does not have child nodes.");
+			}
+
+			HasPhongLighting = true;
+			string_array StrLighting = StringArrayAllocate(Arena, Phong.ChildrenCount);
+			string_array StrEffectNames = StringArrayAllocate(Arena, Phong.ChildrenCount);
+			for(s32 k = 0; k < Phong.ChildrenCount; ++k)
+			{
+				// TODO(Justin): Get effect name.
+				xml_node *Child = Phong.Children[k];
+				xml_node Effect = *Child->Children[0];
+				StrLighting.Strings[k] = Effect.InnerText;
+				StrEffectNames.Strings[k] = Child->Tag;
+			}
+
+			xml_node *MeshNode = Geometry->Children[0];
+			Triangles = *MeshNode->Children[MeshNode->ChildrenCount - 1];
+
+			s32 AttributeCount = 0;
+			for(s32 k = 0; k < Triangles.ChildrenCount; ++k)
+			{
+				xml_node *Node = Triangles.Children[k];
+				if(StringsAreSame(Node->Tag, "input"))
+				{
+					AttributeCount++;
+				}
+			}
+
+			xml_node NodeIndex = {};
+			xml_node NodePos = {};
+			xml_node NodeNormal = {};
+			xml_node NodeUV = {};
+			xml_node NodeColor = {};
+			for(s32 k = 0; k < AttributeCount; ++k)
+			{
+				xml_node N = {};
+				xml_node *Node = Triangles.Children[k];
+
+				string Semantic = Node->Attributes[0].Value;
+				string Value = NodeAttributeValueGet(Node, "source");
+
+				Value.Data++;
+				Value.Size--;
+
+				if(StringsAreSame(Semantic, "VERTEX"))
+				{
+					NodeGet(Geometry, &N, "vertices", (char *)Value.Data);
+					N = *(N.Children[0]);
+
+					Value = NodeAttributeValueGet(&N, "source");
+					Value.Data++;
+					Value.Size--;
+
+					N = {};
+					NodeGet(Geometry, &N, "source", (char *)Value.Data);
+
+					NodePos = *(N.Children[0]);
+				}
+				else if(StringsAreSame(Semantic, "NORMAL"))
+				{
+					NodeGet(Geometry, &N, "source", (char *)Value.Data);
+					NodeNormal = *(N.Children[0]);
+				}
+				else if(StringsAreSame(Semantic, "TEXCOORD"))
+				{
+					NodeGet(Geometry, &N, "source", (char *)Value.Data);
+					NodeUV = *(N.Children[0]);
+				}
+				else if(StringsAreSame(Semantic, "COLOR"))
+				{
+					NodeGet(Geometry, &N, "float_array", (char *)Value.Data);
+					NodeColor = *(N.Children[0]);
+				}
+			}
+
+			NodeGet(Geometry, &NodeIndex, "p");
+
+			u32 TriangleCount = U32FromAttributeValue(NodeIndex.Parent);
+			u32 IndicesCount =  AttributeCount * INDICES_PER_TRIANGLE * TriangleCount;
+			u32 PositionCount = U32FromAttributeValue(&NodePos);
+			u32 NormalCount = U32FromAttributeValue(&NodeNormal);
+			u32 UVCount = U32FromAttributeValue(&NodeUV);
+
+			char Delimeters[] = " \n\r";
+			string_array StrIndices = StringSplitIntoArray(Arena, NodeIndex.InnerText, (u8 *)Delimeters, 3);
+			string_array StrPositions = StringSplitIntoArray(Arena, NodePos.InnerText, (u8 *)Delimeters, 3);
+			string_array StrNormals = StringSplitIntoArray(Arena, NodeNormal.InnerText, (u8 *)Delimeters, 3);
+			string_array StrUVs = StringSplitIntoArray(Arena, NodeUV.InnerText, (u8 *)Delimeters, 3);
+
+			Assert(StrIndices.Count == IndicesCount);
+			Assert(StrPositions.Count == PositionCount);
+			Assert(StrNormals.Count == NormalCount);
+			Assert(StrUVs.Count == UVCount);
+
+			Assert(AttributeCount == 3);
+
+			//
+			// NOTE(Jusitn): Skeletion info
+			//
+
+			//
+			// NOTE(Justin): The children of library controllers are controller nodes.
+			// IF WE ASSUME THAT EACH MESH HAS A CONTROLLER THEN THE CONTROLLERS ARE IN
+			// MESH ORDER. This is the approach that is taken. If this does not work
+			// in general (i.e. a mesh may not have a controller) then we will need to
+			// get the controller of the mesh by way of libaray_visual_scenes.
+			//
+
+			xml_node Controller = {};
+			string_array JointNames = {};
+			string_array StrBind = {};
+			string_array StrInvBind = {};
+			string_array JointInfo = {};
+			if(HasSkeleton)
+			{
+				Assert(MeshCount == (u32)LibControllers.ChildrenCount);
+
+				//
+				// NOTE(Justin): Controller of the current mesh.
+				//
+
+				Controller = *LibControllers.Children[MeshIndex];
+				if(Controller.ChildrenCount != 0)
+				{
+					xml_node NameArray = {};
+					NodeGet(&Controller, &NameArray, "Name_array");
+
+					xml_node BindShape = {};
+					NodeGet(&Controller, &BindShape, "bind_shape_matrix");
+					xml_node InvBind = NodeSourceGet(&Controller, "input", "INV_BIND_MATRIX");
+
+
+					JointNames = StringSplitIntoArray(Arena, NameArray.InnerText, (u8 *)Delimeters, 3);
+					StrBind = StringSplitIntoArray(Arena, BindShape.InnerText, (u8 *)Delimeters, 3);
+					StrInvBind = StringSplitIntoArray(Arena, InvBind.InnerText, (u8 *)Delimeters, 3);
+
+					u32 WeightCount;
+					f32 *Weights;
+					ParseColladaFloatArray(Arena, &Controller, &Weights, &WeightCount, "input", "WEIGHT");
+
+					xml_node VertexWeights = {};
+					NodeGet(&Controller, &VertexWeights, "vertex_weights");
+
+					u32 JointInfoCount = U32FromAttributeValue(&VertexWeights);
+					u32 *JointCountArray = PushArray(Arena, JointInfoCount, u32);
+
+					JointInfo = StringArrayAllocate(Arena, JointInfoCount);
+
+					ParseColladaU32Array(Arena, &Controller, &JointCountArray, JointInfoCount, "vcount");
+
+					xml_node NodeJointsAndWeights = {};
+					NodeGet(&Controller, &NodeJointsAndWeights, "v");
+
+					u32 JointsAndWeightsCount = 2 * U32ArraySum(JointCountArray, JointInfoCount);
+					u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
+					ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
+
+					u32 JointsAndWeightsIndex = 0;
+					for(u32 JointIndex = 0; JointIndex < JointInfoCount; ++JointIndex)
+					{
+						u32 JointCountForVertex = JointCountArray[JointIndex];
+						u32 JointIndices[3] = {};
+						f32 JointWeights[3] = {};
+						f32 Sum = 0.0f;
+
+						for(u32 k = 0; k < JointCountForVertex; ++k)
+						{
+							JointIndices[k] = JointsAndWeights[JointsAndWeightsIndex++];
+
+							u32 WeightIndex = JointsAndWeights[JointsAndWeightsIndex++];
+							JointWeights[k] = Weights[WeightIndex];
+
+							Sum += JointWeights[k];
+						}
+
+						if(Sum != 0.0f)
+						{
+							JointWeights[0] /= Sum;
+							JointWeights[1] /= Sum;
+							JointWeights[2] /= Sum;
+						}
+
+						string StrJointCountForVertex = DigitToString(Arena, JointCountForVertex);
+						string StrJointIndices[3] = {};
+						string StrJointWeights[3] = {};
+
+						StrJointIndices[0] = DigitToString(Arena, JointIndices[0]);
+						StrJointIndices[1] = DigitToString(Arena, JointIndices[1]);
+						StrJointIndices[2] = DigitToString(Arena, JointIndices[2]);
+						StrJointWeights[0] = F32ToString(Arena, JointWeights[0]);
+						StrJointWeights[1] = F32ToString(Arena, JointWeights[1]);
+						StrJointWeights[2] = F32ToString(Arena, JointWeights[2]);
+
+						char Buff[256] = {};
+						u32 i;
+						for(i = 0; i < StrJointCountForVertex.Size; ++i)
+						{
+							Buff[i] = StrJointCountForVertex.Data[i];
+						}
+						Buff[i++] = '\n';
+
+						for(u32 j = 0; j < 3; ++j)
+						{
+							string S = StrJointIndices[j];
+							for(u32 k = 0; k < S.Size; ++k)
+							{
+								Buff[i++] = S.Data[k];
+							}
+							Buff[i++] = ' ';
+						}
+						Buff[i++] = '\n';
+
+						for(u32 j = 0; j < 3; ++j)
+						{
+							string S = StrJointWeights[j];
+							for(u32 k = 0; k < S.Size; ++k)
+							{
+								Buff[i++] = S.Data[k];
+							}
+							Buff[i++] = ' ';
+						}
+						Buff[i++] = '\n';
+						Buff[i] = 0;
+
+						JointInfo.Strings[JointIndex] = StringAllocAndCopy(Arena, Buff);
+					}
+				}
+			}
+
+			string StrIndicesCount = DigitToString(Arena, StrIndices.Count);
+			string StrPositionsCount = DigitToString(Arena, StrPositions.Count);
+			string StrNormalCount = DigitToString(Arena, StrNormals.Count);
+			string StrUVCount = DigitToString(Arena, StrUVs.Count);
+			string StrJointCount = DigitToString(Arena, JointNames.Count);
+			string StrInvBindCount = DigitToString(Arena, StrInvBind.Count);
+			string StrJointInfoCount = DigitToString(Arena, JointInfo.Count);
+
+			FileWriteHeader(OutputFile, "mesh_name", MeshName);
+			if(!HasPhongLighting)
+			{
+				FileWriteHeader(OutputFile, "lighting", "(null)");
+			}
+			else
+			{
+				FileWriteHeader(OutputFile, "lighting", "phong");
+				for(s32 Index = 0; Index < Phong.ChildrenCount; ++Index)
+				{
+					char *Effect = (char *)StrEffectNames.Strings[Index].Data;
+					fputs(Effect, OutputFile);
+					FileWriteStringArrayWithSpaces(OutputFile, (StrLighting.Strings + Index), 1);
+				}
+			}
+
+			FileWriteHeader(OutputFile, "indices_count", StrIndicesCount);
+			FileWriteStringArrayWithSpaces(OutputFile, StrIndices.Strings, StrIndices.Count, 3, "i");
+			//FileWriteHeader(OutputFile, "VERTEX_ATTRIBUTES:", StrAttributeCount);
+			FileWriteHeader(OutputFile, "positions_count", StrPositionsCount);
+			FileWriteStringArrayWithSpaces(OutputFile, StrPositions.Strings, StrPositions.Count, 3, "p");
+			FileWriteHeader(OutputFile, "normals_count", StrNormalCount);
+			FileWriteStringArrayWithSpaces(OutputFile, StrNormals.Strings, StrNormals.Count, 3, "p");
+			FileWriteHeader(OutputFile, "uvs_count", StrUVCount);
+			FileWriteStringArrayWithSpaces(OutputFile, StrUVs.Strings, StrUVs.Count, 2, "uv");
+			FileWriteHeader(OutputFile, "colors_count", "0");
+			//FileWriteStringArrayWithSpaces(OutputFile, StrColors.Strings, StrColors.Count);
+
+			if(!HasSkeleton)
+			{
+				FileWriteHeader(OutputFile, "joint_info_count", StrJointInfoCount);
+				FileWriteHeader(OutputFile, "joint_count", StrJointCount);
+				fputs("*\n", OutputFile);
+			}
+			else
+			{
+				FileWriteHeader(OutputFile, "joint_info_count", StrJointInfoCount);
+				FileWriteStringArrayWithSpaces(OutputFile, JointInfo.Strings, JointInfo.Count);
+				FileWriteHeader(OutputFile, "joint_count", StrJointCount);
+
+				if(LibVisScenes.ChildrenCount != 0)
+				{
+					xml_node FirstNode = *LibVisScenes.Children[0];
+					Assert(StringsAreSame(FirstNode.Tag, "visual_scene"));
+					u32 ControllerIndex = FirstNode.ChildrenCount - MeshCount + MeshIndex;
+					xml_node Node = *FirstNode.Children[ControllerIndex];
+
+					xml_node Skeleton = {};
+					NodeGet(&Node, &Skeleton, "skeleton");
+
+					string JointRootName = Skeleton.InnerText;
+					JointRootName.Data++;
+					JointRootName.Size--;
+
+					xml_node JointRoot = {};
+					NodeGet(&LibVisScenes, &JointRoot, "node", (char *)JointRootName.Data);
+					Assert(JointRoot.ChildrenCount != 0);
+					xml_node *FirstChild = JointRoot.Children[0];
+					string Transform = FirstChild->InnerText;
+
+					fputs("joint_name ", OutputFile);
+					fputs((char *)JointNames.Strings[0].Data, OutputFile);
+					fputs("\n", OutputFile);
+					fputs("parent_index ", OutputFile);
+					fputs("-1", OutputFile);
+					fputs("\n", OutputFile);
+					fputs("xform_joint ", OutputFile);
+					fputs((char *)Transform.Data, OutputFile);
+					fputs("\n", OutputFile);
+
+					FileWriteJoints(OutputFile, Arena, &JointRoot, JointNames.Strings, JointNames.Count);
+				}
+
+				FileWriteHeader(OutputFile, "bind_count", "16");
+				FileWriteStringArrayWithSpaces(OutputFile, StrBind.Strings, StrBind.Count);
+				FileWriteHeader(OutputFile, "inv_bind_count", StrInvBindCount);
+				FileWriteStringArrayWithNewLines(OutputFile, StrInvBind.Strings, StrInvBind.Count, 16);
+			}
+
+			fputs("*\n", OutputFile);
+		}
+
+		fclose(OutputFile);
+	}
+	else
+	{
+		perror("ERROR could not open file");
+	}
+}
+
+internal void 
+ConvertMeshFormat3(memory_arena *Arena, char *DaeFile, char *OutputFileName)
+{
+	FILE *Out = fopen(OutputFileName, "w");
+	if(Out)
+	{
+		loaded_dae DAEFile = ColladaFileLoad(Arena, DaeFile);
+		model Model = ModelInitFromCollada(Arena, DAEFile);
+
+		fputs("mesh_count ", Out);
+		FileWriteArray(Out, &Model.MeshCount, 1);
+		fputs("\n", Out);
+
+		for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
+		{
+			mesh *Mesh = Model.Meshes + MeshIndex;
+
+			fputs("mesh_name ", Out);
+			fputs((char *)Mesh->Name.Data, Out);
+			fputs("\n", Out);
+
+			// NOTE(Justin): IndicesCount == VertexCount
+
+			//fputs("indices_count ", Out);
+			//FileWriteArray(Out, &Mesh->IndicesCount, 1);
+			//fputs("\n", Out);
+
+			fputs("vertices_count ", Out);
+			FileWriteArray(Out, &Mesh->VertexCount, 1);
+			fputs("\n", Out);
+
+			fputs("joint_count ", Out);
+			FileWriteArray(Out, &Mesh->JointCount, 1);
+			fputs("\n", Out);
+
+			fputs("material_spec phong\n", Out);
+
+			fputs("diffuse ", Out);
+			FileWriteArray(Out, &Mesh->MaterialSpec.Diffuse.E[0], 4);
+			fputs("\n", Out);
+
+			fputs("specular ", Out);
+			FileWriteArray(Out, &Mesh->MaterialSpec.Specular.E[0], 4);
+			fputs("\n", Out);
+
+			fputs("ambient ", Out);
+			FileWriteArray(Out, &Mesh->MaterialSpec.Ambient.E[0], 4);
+			fputs("\n", Out);
+
+			fputs("shininess ", Out);
+			FileWriteArray(Out, &Mesh->MaterialSpec.Shininess, 1);
+			fputs("\n", Out);
+
+			fputs("\n", Out);
+
+			// NOTE(Justin): The model is loaded such that the vertices are in triangle order. That is
+			// |v0 v1 v2|v3 v4 v5|... are the first two triagnles constructed from the vertices. Because they are stored in this order
+			// we do not need to store indices at all. They can be generated once when using this format. 
+
+			//fputs("\n", Out);
+			//fputs("indices ", Out);
+			//FileWriteArray(Out, &Mesh->Indices[0], Mesh->IndicesCount);
+			//fputs("\n", Out);
+
+			for(u32 VertexIndex = 0; VertexIndex < Mesh->VertexCount; ++VertexIndex)
+			{
+				vertex *V = Mesh->Vertices + VertexIndex;
+
+				fputs("vertex ", Out);
+				FileWriteArray(Out, &VertexIndex, 1);
+				fputs("\n", Out);
+
+				fputs("p ", Out);
+				FileWriteArray(Out, &V->P.E[0], 3);
+				fputs("\n", Out);
+
+				fputs("n ", Out);
+				FileWriteArray(Out, &V->N.E[0], 3);
+				fputs("\n", Out);
+
+				fputs("uv ", Out);
+				FileWriteArray(Out, &V->UV.E[0], 2);
+				fputs("\n", Out);
+
+				joint_info JointInfo = V->JointInfo;
+
+				fputs("joint_count_vertex ", Out);
+				FileWriteArray(Out, &JointInfo.Count, 1);
+				fputs("\n", Out);
+
+				fputs("joint_indices ", Out);
+				FileWriteArray(Out, &JointInfo.JointIndex[0], 3);
+				fputs("\n", Out);
+
+				fputs("joint_weights ", Out);
+				FileWriteArray(Out, &JointInfo.Weights[0], 3);
+				fputs("\n", Out);
+
+				fputs("\n", Out);
+			}
+
+			for(u32 JointIndex = 0; JointIndex < Mesh->JointCount; ++JointIndex)
+			{
+				joint *Joint = Mesh->Joints + JointIndex;
+				char *JointName = (char *)Joint->Name.Data;
+
+				fputs("joint_name ", Out);
+				fputs(JointName, Out);
+				fputs("\n", Out);
+
+				fputs("parent_index ", Out);
+				FileWriteArray(Out, &Joint->ParentIndex, 1);
+				fputs("\n", Out);
+
+				fputs("xform_joint\n", Out);
+				FileWriteArray(Out, &Joint->Transform.E[0][0], 4);
+				fputs("\n", Out);
+				FileWriteArray(Out, &Joint->Transform.E[1][0], 4);
+				fputs("\n", Out);
+				FileWriteArray(Out, &Joint->Transform.E[2][0], 4);
+				fputs("\n", Out);
+				FileWriteArray(Out, &Joint->Transform.E[3][0], 4);
+				fputs("\n", Out);
+
+				fputs("\n", Out);
+			}
+
+			fputs("xform_bind\n", Out);
+			FileWriteArray(Out, &Mesh->BindTransform.E[0][0], 4);
+			fputs("\n", Out);
+			FileWriteArray(Out, &Mesh->BindTransform.E[1][0], 4);
+			fputs("\n", Out);
+			FileWriteArray(Out, &Mesh->BindTransform.E[2][0], 4);
+			fputs("\n", Out);
+			FileWriteArray(Out, &Mesh->BindTransform.E[3][0], 4);
+			fputs("\n", Out);
+
+			fputs("\n", Out);
+			for(u32 JointIndex = 0; JointIndex < Mesh->JointCount; ++JointIndex)
+			{
+				mat4 *M = Mesh->InvBindTransforms + JointIndex;
+
+				fputs("xform_inv_bind\n", Out);
+				FileWriteArray(Out, &M->E[0][0], 4);
+				fputs("\n", Out);
+				FileWriteArray(Out, &M->E[1][0], 4);
+				fputs("\n", Out);
+				FileWriteArray(Out, &M->E[2][0], 4);
+				fputs("\n", Out);
+				FileWriteArray(Out, &M->E[3][0], 4);
+				fputs("\n", Out);
+
+				fputs("\n", Out);
+			}
+
+			fputs("*\n", Out);
+		}
+		fclose(Out);
+	}
+}
+
+internal model
+ModelLoad2(memory_arena *Arena, char *FileName)
+{
+	model Model = {};
+
+	FILE *In = fopen(FileName, "r");
+	if(In)
+	{
+		u32 Size = FileSizeGet(In);
+		if(Size != 0)
+		{
+			u8 *Content = (u8 *)PushSize_(Arena, Size);
+			FileReadEntireAndNullTerminate(Content, Size, In);
+			if(Content)
+			{
+				u8 Buff[4096];
+				u8 *C = Content;
+
+				BufferNextWord(&C, Buff);
+				Assert(StringsAreSame(Buff, "mesh_count"));
+				EatSpaces(&C);
+				BufferNextWord(&C, Buff);
+				Model.MeshCount = U32FromASCII(Buff);
+				Assert(Model.MeshCount != 0);
+				Model.Meshes = PushArray(Arena, Model.MeshCount, mesh);
+
+				u32 MeshIndex = 0;
+				u32 VertexIndex = 0;
+				u32 JointIndex = 0;
+				u32 InvBindIndex = 0;
+
+				mesh *Mesh = Model.Meshes + MeshIndex;
+				vertex *V = Mesh->Vertices + VertexIndex;
+				joint *Joint = Mesh->Joints + JointIndex;
+				string *JointName = Mesh->JointNames + JointIndex;
+				while(*C++)
+				{
+					BufferNextWord(&C, Buff);
+					EatSpaces(&C);
+					if(StringsAreSame("mesh_name", Buff))
+					{
+
+						BufferNextWord(&C, Buff);
+						string MeshName = StringAllocAndCopy(Arena, Buff);
+						if(!StringsAreSame(MeshName, Mesh->Name))
+						{
+							Mesh = Model.Meshes + MeshIndex++;
+							Mesh->Name = MeshName;
+						}
+					}
+					if(StringsAreSame("vertices_count", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						Mesh->VertexCount = U32FromASCII(Buff);
+						Assert(Mesh->VertexCount != 0);
+						Mesh->Vertices = PushArray(Arena, Mesh->VertexCount, vertex);
+						Mesh->Indices = PushArray(Arena, Mesh->VertexCount, u32);
+					}
+					if(StringsAreSame("joint_count", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						Mesh->JointCount = U32FromASCII(Buff);
+						Assert(Mesh->JointCount != 0);
+						Mesh->Joints = PushArray(Arena, Mesh->JointCount, joint);
+						Mesh->JointNames = PushArray(Arena, Mesh->JointCount, string);
+						Mesh->InvBindTransforms = PushArray(Arena, Mesh->JointCount, mat4);
+						Mesh->JointTransforms = PushArray(Arena, Mesh->JointCount, mat4);
+						Mesh->ModelSpaceTransforms = PushArray(Arena, Mesh->JointCount, mat4);
+					}
+					if(StringsAreSame("diffuse", Buff))
+					{
+						for(u32 Index = 0; Index < 4; Index++)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							Mesh->MaterialSpec.Diffuse.E[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("specular", Buff))
+					{
+						for(u32 Index = 0; Index < 4; Index++)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							Mesh->MaterialSpec.Specular.E[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("ambient", Buff))
+					{
+						for(u32 Index = 0; Index < 4; Index++)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							Mesh->MaterialSpec.Ambient.E[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("shininess", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						EatSpaces(&C);
+						Mesh->MaterialSpec.Shininess = F32FromASCII(Buff);
+					}
+					if(StringsAreSame("vertex", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						VertexIndex = U32FromASCII(Buff);
+						V = Mesh->Vertices + VertexIndex;
+					}
+					if(StringsAreSame("p", Buff))
+					{
+						for(u32 Index = 0; Index < 3; ++Index)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							V->P.E[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("n", Buff))
+					{
+						for(u32 Index = 0; Index < 3; ++Index)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							V->N.E[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("uv", Buff))
+					{
+						for(u32 Index = 0; Index < 2; ++Index)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							V->UV.E[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("joint_count_vertex", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						EatSpaces(&C);
+						V->JointInfo.Count = U32FromASCII(Buff);
+					}
+					if(StringsAreSame("joint_indices", Buff))
+					{
+						for(u32 Index = 0; Index < 3; ++Index)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							V->JointInfo.JointIndex[Index] = U32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("joint_weights", Buff))
+					{
+						for(u32 Index = 0; Index < 3; ++Index)
+						{
+							BufferNextWord(&C, Buff);
+							EatSpaces(&C);
+							V->JointInfo.Weights[Index] = F32FromASCII(Buff);
+						}
+					}
+					if(StringsAreSame("joint_name", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						EatSpaces(&C);
+						Assert(JointIndex <= Mesh->JointCount);
+						Joint = Mesh->Joints + JointIndex;
+						Joint->Name = StringAllocAndCopy(Arena, Buff);
+						JointName = Mesh->JointNames + JointIndex;
+						*JointName = StringAllocAndCopy(Arena, Buff);
+						JointIndex++;
+						Assert(JointIndex <= Mesh->JointCount);
+
+					}
+					if(StringsAreSame("parent_index", Buff))
+					{
+						BufferNextWord(&C, Buff);
+						EatSpaces(&C);
+						Joint->ParentIndex = S32FromASCII(Buff);
+					}
+					if(StringsAreSame("xform_joint", Buff))
+					{
+						AdvanceToNewLine(&C);
+						for(u32 Row = 0; Row < 4; ++Row)
+						{
+							for(u32 Col = 0; Col < 4; ++Col)
+							{
+								BufferNextWord(&C, Buff);
+								EatSpaces(&C);
+								Joint->Transform.E[Row][Col] = F32FromASCII(Buff);
+							}
+							AdvanceToNewLine(&C);
+						}
+					}
+					if(StringsAreSame("xform_bind", Buff))
+					{
+						AdvanceToNewLine(&C);
+						for(u32 Row = 0; Row < 4; ++Row)
+						{
+							for(u32 Col = 0; Col < 4; ++Col)
+							{
+								BufferNextWord(&C, Buff);
+								EatSpaces(&C);
+								Mesh->BindTransform.E[Row][Col] = F32FromASCII(Buff);
+							}
+							AdvanceToNewLine(&C);
+						}
+					}
+					if(StringsAreSame("xform_inv_bind", Buff))
+					{
+						AdvanceToNewLine(&C);
+
+						mat4 *M = Mesh->InvBindTransforms + InvBindIndex++;
+						for(u32 Row = 0; Row < 4; ++Row)
+						{
+							for(u32 Col = 0; Col < 4; ++Col)
+							{
+								BufferNextWord(&C, Buff);
+								EatSpaces(&C);
+								M->E[Row][Col] = F32FromASCII(Buff);
+							}
+							AdvanceToNewLine(&C);
+						}
+					}
+					if(StringsAreSame("*", Buff))
+					{
+						VertexIndex = 0;
+						JointIndex = 0;
+						InvBindIndex = 0;
+					}
+				}
+			}
+		}
+
+		fclose(In);
+	}
+
+	return(Model);
+}
+
+9/28/2024
+
+internal void
+ConvertAnimationFormat(memory_arena *Arena, loaded_dae DaeFile, char *OutputFileName)
+{
+	FILE *OutputFile = fopen(OutputFileName, "w");
+	if(OutputFile)
+	{
+		xml_node *Root = DaeFile.Root;
+		xml_node LibAnimations = {};
+		NodeGet(Root, &LibAnimations, "library_animations");
+		if(LibAnimations.ChildrenCount != 0)
+		{
+			u32 JointCount = LibAnimations.ChildrenCount;
+			u32 TimeCount = 0;
+			u32 TransformCount = 0;
+			//f32 Duration = 0.0f;
+			//f32 FPS  = 0.0f;
+
+			xml_node FloatArray = {};
+			NodeGet(&LibAnimations, &FloatArray, "float_array");
+			string FloatCount = NodeAttributeValueGet(&FloatArray, "count");
+
+			TimeCount = U32FromASCII(FloatCount);
+			TransformCount = TimeCount;
+
+			string StrJointCount = DigitToString(Arena, JointCount);
+			fputs("JOINTS: ", OutputFile);
+			fputs((char *)StrJointCount.Data, OutputFile);
+			fputs("\n", OutputFile);
+
+			fputs("TIMES: ", OutputFile);
+			fputs((char *)FloatCount.Data, OutputFile);
+			fputs("\n", OutputFile);
+
+			fputs("TRANSFORMS: ", OutputFile);
+			fputs((char *)FloatCount.Data, OutputFile);
+			fputs("\n", OutputFile);
+
+			fputs("*\n", OutputFile);
+
+			u8 Delimeters[] = " \n\r";
+			for(s32 ChildIndex = 0; ChildIndex < LibAnimations.ChildrenCount; ++ChildIndex)
+			{
+				xml_node *Node = LibAnimations.Children[ChildIndex];
+				Assert(StringsAreSame(Node->Tag, "animation"));
+
+				string JointName = NodeAttributeValueGet(Node, "name");
+				fputs((char *)JointName.Data, OutputFile);
+				fputs("\n", OutputFile);
+
+				xml_node Sampler = *Node->Children[Node->ChildrenCount - 2];
+				xml_node Input = *Sampler.Children[0];
+				xml_node Output = *Sampler.Children[1];
+
+				string InputSrcName = NodeAttributeValueGet(&Input, "source");
+				string OutputSrcName = NodeAttributeValueGet(&Output, "source");
+
+				InputSrcName.Data++;
+				OutputSrcName.Data++;
+
+				InputSrcName.Size--;
+				OutputSrcName.Size--;
+
+				xml_node N = {};
+				NodeGet(Node, &N, "source", (char *)InputSrcName.Data);
+				N = *N.Children[0];
+
+				string Count = NodeAttributeValueGet(&N, "count");
+
+				u32 NodeTimeCount = U32FromASCII(Count.Data);
+				Assert(TimeCount == NodeTimeCount);
+				Assert(TransformCount == NodeTimeCount);
+
+				string_list TimeList = StringSplit(Arena, N.InnerText, Delimeters, ArrayCount(Delimeters));
+				string_node *StrNode = TimeList.First;
+				for(u32 Index = 0; Index < TimeList.Count; ++Index)
+				{
+					string S = StringAllocAndCopy(Arena, StrNode->String);
+					char *Cstr = (char *)S.Data;
+					fputs(Cstr, OutputFile);
+					fputs(" ", OutputFile);
+					StrNode = StrNode->Next;
+				}
+
+				N = {};
+				NodeGet(Node, &N, "source", (char *)OutputSrcName.Data);
+				N = *N.Children[0];
+
+				string_list TransformList = StringSplit(Arena, N.InnerText, (u8 *)Delimeters, 3);
+				StrNode = TransformList.First;
+				for(u32 Index = 0; Index < TransformList.Count; ++Index)
+				{
+					string S = StringAllocAndCopy(Arena, StrNode->String);
+					char *Cstr = (char *)S.Data;
+					fputs(Cstr, OutputFile);
+					fputs(" ", OutputFile);
+					StrNode = StrNode->Next;
+				}
+				fputs("\n", OutputFile);
+			}
+		}
+		else
+		{
+			printf("library_animations not found!.");
+		}
+	}
+	else
+	{
+		perror("Could not open file");
+	}
+}

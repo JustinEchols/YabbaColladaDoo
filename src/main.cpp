@@ -1,22 +1,30 @@
 
 /*
  TODO(Justin):
+ [] Use temporary memory when loading models
+ [?] Separate skeleton/armature from each mesh. A mesh may be affected by a subset of the entire
+	skeleton. We can store the entire skeleton at the model level and update the skeleton each frame
+	then the joint transforms / model transforms of each mesh need to be updated.
+ [] Fix simple textured quads
  [] opengl error logging/checking!  
- [] fonts 
- [] imgui 
- [] asset system  
- [] asset file structure 
+ [?] fonts 
+ [?] imgui 
+ [?] asset system  
+ [?] asset file structure 
+ [?] Add tangents and BiTangents to asset mesh file
+ [] Average tangents and BiTangents when model loading 
  [X] Transform normals via joint transforms!  
- [?] How to get the correct normal when using a normal map AND doing skeletal animation?
+ [X] Get the correct normal when using a normal map AND doing skeletal animation
  [] File paths from build directory
  [X] Simple animation file format 
  [X] Test different models.
+	 [] Test different models++.
  [X] Instead of storing mat4's for animation, store pos, quat, scale and construct for both key frame and model
  [X] Check UV mapping 
  [X] Phong lighting 
  [?] Diffuse, ambient, specular, and normal textures in file format 
  [] WARNING using String() on a token is bad and can easily result in an access violation. REMOVE THIS
- [] Remove strtok_s
+ [?] Remove strtok_s
  [?] Use temporary memory when initializing mesh
  [] -f command line option to read in a list of files from a txt file and do the conversion on multiple dae files
 */
@@ -64,6 +72,8 @@ typedef uintptr_t umm;
 #define PushStruct(Arena, Type) (Type *)PushSize_(Arena, sizeof(Type))
 #define ArrayCopy(Count, Src, Dest) MemoryCopy((Count)*sizeof(*(Src)), (Src), (Dest))
 
+#define CString(String) (char *)String.Data
+
 #define SLLQueuePush_N(First,Last,Node,Next) (((First)==0?\
 (First)=(Last)=(Node):\
 ((Last)->Next=(Node),(Last)=(Node))),\
@@ -83,12 +93,14 @@ ArraySum(u32 *A, u32 Count)
 	return(Result);
 }
 
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 #include "memory.h"
 #include "math_util.h"
 #include "strings.h"
+#include "texture.h"
 #include "xml.h"
 #include "animation.h"
 #include "mesh.h"
@@ -96,6 +108,7 @@ ArraySum(u32 *A, u32 Count)
 #include "entity.h"
 #include "strings.cpp"
 #include "file_io.cpp"
+#include "texture.cpp"
 #include "xml.cpp"
 #include "mesh.cpp"
 #include "animation.cpp"
@@ -136,10 +149,60 @@ struct game_state
 	model XBot;
 	model Vampire;
 	model Paladin;
+	model Ninja;
+	model Arissa;
+	model Maria;
+	model Vanguard;
+	model Brute;
+	model Mannequin;
+	model ErikaArcher;
+	model BulkyKnight;
+
+	model Models[16];
+
 	model DebugArrow;
 
-	texture Textures[16];
+	texture Textures[64];
 };
+
+enum buttons
+{
+	Button_W,
+	Button_A,
+	Button_S,
+	Button_D,
+
+	Button_Count
+};
+
+struct game_button_state
+{
+	b32 EndedDown;
+};
+
+struct game_input
+{
+	union
+	{
+		game_button_state Buttons[Button_Count];
+		struct
+		{
+			game_button_state W;
+			game_button_state A;
+			game_button_state S;
+			game_button_state D;
+		};
+	};
+};
+
+static game_input GameInput[2];
+
+inline b32
+IsDown(game_button_state Button)
+{
+	b32 Result = Button.EndedDown;
+	return(Result);
+}
 
 #include "entity.cpp"
 #include "glfw.cpp"
@@ -237,405 +300,578 @@ QuadDefault(void)
 	return(Result);
 }
 
+internal void
+AllocateModelTextures(model *Model)
+{
+	for(u32 TextureIndex = 0; TextureIndex < Model->TextureCount; ++TextureIndex)
+	{
+		texture *Texture = Model->Textures + TextureIndex;
+		OpenGLAllocateTexture(Texture);
+	}
+}
+
 int main(int Argc, char **Argv)
 {
 	void *Memory = calloc(Megabyte(1024), sizeof(u8));
-
 	memory_arena Arena_;
 	ArenaInitialize(&Arena_, (u8 *)Memory, Megabyte(1024));
 	memory_arena *Arena = &Arena_;
 
 	glfwSetErrorCallback(GLFWErrorCallback);
-	if(glfwInit())
+	if(!glfwInit())
 	{
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_SAMPLES, 4);
-		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+		printf("ERROR: GLFW failed to initialize\n");
+		return(0);
+	}
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_SAMPLES, 4);
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 
-		window Window = {};
-		Window.Width = 960;
-		Window.Height = 540;
-		Window.Handle = glfwCreateWindow(Window.Width, Window.Height, "YabbaColladaDoo", NULL, NULL);
+	window Window = {};
+	Window.Width = 960;
+	Window.Height = 540;
 
-		if(Window.Handle)
-		{
-			glfwMakeContextCurrent(Window.Handle);
-			glfwSetInputMode(Window.Handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-			glfwSetKeyCallback(Window.Handle, GLFWKeyCallBack);
-			glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
-			glewExperimental = GL_TRUE;
-			if(glewInit() == GLEW_OK)
-			{
+	Window.Handle = glfwCreateWindow(Window.Width, Window.Height, "YabbaColladaDoo", NULL, NULL);
+	if(!Window.Handle)
+	{
+		printf("ERROR: GLFW failed to create a window\n");
+		return(0);
+	}
+
+	glfwMakeContextCurrent(Window.Handle);
+	glfwSetInputMode(Window.Handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	glfwSetKeyCallback(Window.Handle, GLFWKeyCallBack);
+	glfwSetFramebufferSizeCallback(Window.Handle, GLFWFrameBufferResizeCallBack);
+	glewExperimental = GL_TRUE;
+	if(glewInit() != GLEW_OK)
+	{
+		printf("ERROR: GLEW failed to initialize\n");
+		return(0);
+	}
 				//
 				// NOTE(Justin): Transformations
 				//
 
-				v3 CameraP = V3(0.0f, 5.0f, 30.0f);
-				v3 Direction = V3(0.0f, 0.0f, -1.0f);
-				mat4 CameraTransform = Mat4Camera(CameraP, CameraP + Direction);
+	v3 CameraP = V3(0.0f, 10.0f, 100.0f);
+	v3 Direction = V3(0.0f, 0.0f, -1.0f);
+	mat4 CameraTransform = Mat4Camera(CameraP, CameraP + Direction);
 
-				f32 FOV = DegreeToRad(45.0f);
-				f32 Aspect = (f32)Window.Width / (f32)Window.Height;
-				f32 ZNear = 0.1f;
-				f32 ZFar = 100.0f;
-				mat4 PerspectiveTransform = Mat4Perspective(FOV, Aspect, ZNear, ZFar);
+	f32 FOV = DegreeToRad(45.0f);
+	f32 Aspect = (f32)Window.Width / (f32)Window.Height;
+	f32 ZNear = 0.1f;
+	f32 ZFar = 100.0f;
+	mat4 PerspectiveTransform = Mat4Perspective(FOV, Aspect, ZNear, ZFar);
 
-				GLenum GLParams[] =
+	GLenum GLParams[] =
+	{
+		GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
+		GL_MAX_CUBE_MAP_TEXTURE_SIZE,
+		GL_MAX_DRAW_BUFFERS,
+		GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
+		GL_MAX_TEXTURE_IMAGE_UNITS,
+		GL_MAX_TEXTURE_SIZE,
+		GL_MAX_VARYING_FLOATS,
+		GL_MAX_VERTEX_ATTRIBS,
+		GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
+		GL_MAX_VERTEX_UNIFORM_COMPONENTS,
+		GL_MAX_VIEWPORT_DIMS,
+		GL_STEREO,
+	};
+	const char* GLParamNames[] =
+	{
+		"GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS",
+		"GL_MAX_CUBE_MAP_TEXTURE_SIZE",
+		"GL_MAX_DRAW_BUFFERS",
+		"GL_MAX_FRAGMENT_UNIFORM_COMPONENTS",
+		"GL_MAX_TEXTURE_IMAGE_UNITS",
+		"GL_MAX_TEXTURE_SIZE",
+		"GL_MAX_VARYING_FLOATS",
+		"GL_MAX_VERTEX_ATTRIBS",
+		"GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS",
+		"GL_MAX_VERTEX_UNIFORM_COMPONENTS",
+		"GL_MAX_VIEWPORT_DIMS",
+		"GL_STEREO",
+	};
+
+	char *Vendor = (char *)glGetString(GL_VENDOR);
+	char *RendererName = (char *)glGetString(GL_RENDERER);
+	char *RendererVersion = (char *)glGetString(GL_VERSION);
+	char *ShadingLanguageVersion = (char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
+	printf("%s\n", Vendor);
+	printf("%s\n", RendererName);
+	printf("%s\n", RendererVersion);
+	printf("%s\n", ShadingLanguageVersion);
+	for(u32 Index = 0; Index < ArrayCount(GLParams); ++Index)
+	{
+		s32 Param = 0;
+		glGetIntegerv(GLParams[Index], &Param);
+		printf("%s %i\n", GLParamNames[Index], Param);
+	}
+
+	glEnable(GL_DEBUG_OUTPUT);
+	glDebugMessageCallback(GLDebugCallback, 0);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glFrontFace(GL_CCW);
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+	glEnable(GL_MULTISAMPLE);
+	glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+	glEnable(GL_SAMPLE_ALPHA_TO_ONE);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	//
+	// NOTE(Justin): Assets
+	//
+
+	char *ShaderFiles[] =
+	{
+		"shaders\\main.vs",
+		"shaders\\main.fs",
+		"shaders\\basic.vs",
+		"shaders\\basic.fs",
+		"shaders\\quad.vs",
+		"shaders\\quad.fs",
+	};
+
+	char *XBotAnimations[] =
+	{
+		"models\\XBot\\animationsXBot_ActionIdle.animation",
+	};
+	char *PaladinAnimations[] =
+	{
+		"models\\Paladin\\animations\\Paladin_SwordAndShieldCasting.animation",
+	};
+	char *ArcherAnimations[] =
+	{
+		"models\\ErikaArcher\\animations\\Archer_StandingAimRecoil.animation",
+	};
+	char *BruteAnimations[] =
+	{
+		"models\\Brute\\animations\\Brute_Idle.animation",
+	};
+	char *MariaAnimations[] =
+	{
+		"models\\Maria\\animations\\Maria_Idle.animation",
+	};
+
+	game_state GameState_ = {};
+	game_state *GameState = &GameState_;
+
+	shader Shaders[3];
+	for(u32 ShaderIndex = 0; ShaderIndex < ArrayCount(Shaders); ++ShaderIndex)
+	{
+		Shaders[ShaderIndex] = ShaderLoad(ShaderFiles[2 * ShaderIndex], ShaderFiles[2 * ShaderIndex + 1]);
+		Shaders[ShaderIndex].Handle = GLProgramCreate(Shaders[ShaderIndex].VS, Shaders[ShaderIndex].FS);
+	}
+
+	//
+	// NOTE(Justin): Models
+	//
+
+	GameState->Brute = ModelLoadFromCollada(Arena, "models\\Brute\\Brute.dae");
+	model *Brute = &GameState->Brute;
+	Brute->Animations.Count = ArrayCount(BruteAnimations);
+	Brute->Animations.Info = PushArray(Arena, Brute->Animations.Count, animation_info);
+	animation_info *BruteAnimation = Brute->Animations.Info;
+	*BruteAnimation  = AnimationLoad(Arena, BruteAnimations[0]);
+
+	GameState->Cube = ModelLoad(Arena, "models\\Cube\\Cube.mesh");
+	GameState->Cube.Textures[0] = TextureLoad(Arena, "textures\\orange_texture_02.png");
+	GameState->Cube.Meshes[0].DiffuseTexture = 0;
+	GameState->Cube.Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
+
+	GameState->Sphere = ModelLoad(Arena, "models\\Sphere.mesh");
+	model *Sphere = &GameState->Sphere;
+
+	GameState->XBot = ModelLoad(Arena, "models\\XBot\\XBot.mesh");
+	//GameState->XBot = ModelLoadFromCollada(Arena, "models\\XBot.dae");
+	model *XBot = &GameState->XBot;
+
+	XBot->Animations.Count = ArrayCount(XBotAnimations);
+	XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
+	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(XBotAnimations); ++AnimIndex)
+	{
+		char *FileName = XBotAnimations[AnimIndex];
+		animation_info TestAnimation = AnimationLoad(Arena, FileName);
+		animation_info *Info = XBot->Animations.Info + AnimIndex;
+		*Info = TestAnimation;
+	}
+
+#if 0
+	// Collada Initialization
+
+	GameState->Paladin = ModelLoadFromCollada(Arena, "models\\Paladin\\PaladinWithProp.dae");
+	model *Paladin = &GameState->Paladin;
+	Paladin->Animations.Count = ArrayCount(PaladinAnimations);
+	Paladin->Animations.Info = PushArray(Arena, Paladin->Animations.Count, animation_info);
+	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(PaladinAnimations); ++AnimIndex)
+	{
+		char *FileName = PaladinAnimations[AnimIndex];
+		animation_info TestAnimation = AnimationLoad(Arena, FileName);
+		animation_info *Info = Paladin->Animations.Info + AnimIndex;
+		*Info = TestAnimation;
+	}
+#else
+	// Custom Initialization
+	GameState->Paladin = ModelLoad(Arena, "models\\Paladin\\PaladinWithProp.mesh");
+	model *Paladin = &GameState->Paladin;
+
+	Paladin->TextureCount = 3;
+	Paladin->Textures[0] = TextureLoad(Arena, "models\\Paladin\\textures\\Paladin_diffuse.png");
+	Paladin->Textures[1] = TextureLoad(Arena, "models\\Paladin\\textures\\Paladin_specular.png");
+	Paladin->Textures[2] = TextureLoad(Arena, "models\\Paladin\\textures\\Paladin_normal.png");
+	for(u32 MeshIndex = 0; MeshIndex < Paladin->MeshCount; ++MeshIndex)
+	{
+		mesh *Mesh = Paladin->Meshes + MeshIndex;
+		Mesh->DiffuseTexture = 0;
+		Mesh->SpecularTexture = 1;
+		Mesh->NormalTexture = 2;
+		Mesh->MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular | MaterialFlag_Normal);
+	}
+
+	Paladin->Animations.Count = ArrayCount(PaladinAnimations);
+	Paladin->Animations.Info = PushArray(Arena, Paladin->Animations.Count, animation_info);
+	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(PaladinAnimations); ++AnimIndex)
+	{
+		char *FileName = PaladinAnimations[AnimIndex];
+		animation_info TestAnimation = AnimationLoad(Arena, FileName);
+		animation_info *Info = Paladin->Animations.Info + AnimIndex;
+		*Info = TestAnimation;
+	}
+#endif
+
+#if 0
+	GameState->Maria = ModelLoadFromCollada(Arena, "models\\Maria\\MariaSword.dae");
+	model *Maria = &GameState->Maria;
+	Maria->Animations.Count = ArrayCount(MariaAnimations);
+	Maria->Animations.Info = PushArray(Arena, Maria->Animations.Count, animation_info);
+	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(MariaAnimations); ++AnimIndex)
+	{
+		char *FileName = MariaAnimations[AnimIndex];
+		animation_info TestAnimation = AnimationLoad(Arena, FileName);
+		animation_info *Info = Maria->Animations.Info + AnimIndex;
+		*Info = TestAnimation;
+	}
+#else
+	GameState->Maria = ModelLoad(Arena, "models\\Maria\\MariaSword.mesh");
+	model *Maria = &GameState->Maria;
+
+	Maria->TextureCount = 3;
+	Maria->Textures[0] = TextureLoad(Arena, "models\\Maria\\textures\\maria_diffuse.png");
+	Maria->Textures[1] = TextureLoad(Arena, "models\\Maria\\textures\\maria_specular.png");
+	Maria->Textures[2] = TextureLoad(Arena, "models\\Maria\\textures\\maria_normal.png");
+	for(u32 MeshIndex = 0; MeshIndex < Maria->MeshCount; ++MeshIndex)
+	{
+		mesh *Mesh = Maria->Meshes + MeshIndex;
+		Mesh->DiffuseTexture = 0;
+		Mesh->SpecularTexture = 1;
+		Mesh->NormalTexture = 2;
+		Mesh->MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular | MaterialFlag_Normal);
+	}
+
+	Maria->Animations.Count = ArrayCount(MariaAnimations);
+	Maria->Animations.Info = PushArray(Arena, Maria->Animations.Count, animation_info);
+	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(MariaAnimations); ++AnimIndex)
+	{
+		char *FileName = MariaAnimations[AnimIndex];
+		animation_info TestAnimation = AnimationLoad(Arena, FileName);
+		animation_info *Info = Maria->Animations.Info + AnimIndex;
+		*Info = TestAnimation;
+	}
+
+#endif
+
+
+#if 1
+	GameState->ErikaArcher = ModelLoadFromCollada(Arena, "models\\ErikaArcher\\Erika_ArcherWithBowArrow.dae");
+	model *ErikaArcher = &GameState->ErikaArcher;
+	ErikaArcher->Animations.Count = ArrayCount(ArcherAnimations);
+	ErikaArcher->Animations.Info = PushArray(Arena, ErikaArcher->Animations.Count, animation_info);
+
+	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(ArcherAnimations); ++AnimIndex)
+	{
+		char *FileName = ArcherAnimations[AnimIndex];
+		animation_info TestAnimation = AnimationLoad(Arena, FileName);
+		animation_info *Info = GameState->ErikaArcher.Animations.Info + AnimIndex;
+		*Info = TestAnimation;
+	}
+#else
+#endif
+
+	//
+	// GPU allocations
+	//
+
+	OpenGLAllocateAnimatedModel(&GameState->XBot, Shaders[0].Handle);
+	AllocateModelTextures(&GameState->XBot);
+
+	OpenGLAllocateAnimatedModel(&GameState->Paladin, Shaders[0].Handle);
+	AllocateModelTextures(&GameState->Paladin);
+
+	OpenGLAllocateAnimatedModel(&GameState->Vampire, Shaders[0].Handle);
+	AllocateModelTextures(&GameState->Vampire);
+
+	//OpenGLAllocateAnimatedModel(Ninja, Shaders[0].Handle);
+	//AllocateModelTextures(Ninja);
+
+	OpenGLAllocateAnimatedModel(&GameState->Maria, Shaders[0].Handle);
+	AllocateModelTextures(&GameState->Maria);
+
+	//OpenGLAllocateAnimatedModel(Mannequin, Shaders[0].Handle);
+	//AllocateModelTextures(Mannequin);
+
+	OpenGLAllocateAnimatedModel(&GameState->Brute, Shaders[0].Handle);
+	AllocateModelTextures(&GameState->Brute);
+
+	OpenGLAllocateAnimatedModel(&GameState->ErikaArcher, Shaders[0].Handle);
+	AllocateModelTextures(&GameState->ErikaArcher);
+
+	OpenGLAllocateAnimatedModel(&GameState->Sphere, Shaders[0].Handle);
+
+	OpenGLAllocateModel(&GameState->Cube, Shaders[1].Handle);
+	AllocateModelTextures(&GameState->Cube);
+
+	quad Quad = QuadDefault();
+	Quad.DiffuseTexture = GameState->Textures[2].Handle;
+	Quad.NormalTexture = GameState->Textures[3].Handle;
+	OpenGLAllocateQuad(&Quad, Shaders[2].Handle);
+
+	PlayerAdd(GameState);
+	VampireAdd(GameState);
+	LightAdd(GameState);
+	PaladinAdd(GameState);
+	//NinjaAdd(GameState);
+	MariaAdd(GameState);
+	BruteAdd(GameState);
+	//ErikaArcherAdd(GameState);
+	BlockAdd(GameState);
+
+	f32 StartTime = 0.0f;
+	f32 EndTime = 0.0f;
+	f32 DtForFrame = 0.0f;
+	f32 Angle = 0.0f;
+	glfwSetTime(0.0);
+
+	//
+	// NOTE(Justin): Set all the uniforms that do not change during runtime.
+	//
+
+	glUseProgram(Shaders[0].Handle);
+	UniformMatrixSet(Shaders[0].Handle, "View", CameraTransform);
+	UniformMatrixSet(Shaders[0].Handle, "Projection", PerspectiveTransform);
+	glUseProgram(Shaders[1].Handle);
+	UniformMatrixSet(Shaders[1].Handle, "Projection", PerspectiveTransform);
+	glUseProgram(Shaders[2].Handle);
+	UniformMatrixSet(Shaders[2].Handle, "Projection", PerspectiveTransform);
+
+	v3 LightColor = V3(1.0f);
+	v3 Ambient = V3(0.1f);
+	while(!glfwWindowShouldClose(Window.Handle))
+	{
+		game_input *OldInput = &GameInput[0];
+		game_input *NewInput = &GameInput[1];
+		*NewInput = {};
+
+		for(u32 ButtonIndex = 0; ButtonIndex < ArrayCount(NewInput->Buttons); ++ButtonIndex)
+		{
+			NewInput->Buttons[ButtonIndex].EndedDown = OldInput->Buttons[ButtonIndex].EndedDown;
+		}
+
+
+		glfwPollEvents();
+
+		v3 ddPForCamera = {};
+		if(IsDown(NewInput->W))
+		{
+			ddPForCamera = V3(0.0f, 0.0f, -1.0f);
+		}
+		if(IsDown(NewInput->A))
+		{
+			ddPForCamera = ddPForCamera + V3(-1.0f, 0.0f, 0.0f);
+		}
+		if(IsDown(NewInput->S))
+		{
+			ddPForCamera = ddPForCamera + V3(0.0f, 0.0f, 1.0f);
+		}
+		if(IsDown(NewInput->D))
+		{
+			ddPForCamera = ddPForCamera + V3(1.0f, 0.0f, 0.0f);
+		}
+
+		if(ddPForCamera.x != 0.0f || ddPForCamera.y != 0.0f || ddPForCamera.z != 0.0f)
+		{
+			ddPForCamera = Normalize(ddPForCamera);
+		}
+
+		CameraP = CameraP + 100.0f*DtForFrame*ddPForCamera;
+		CameraTransform = Mat4Camera(CameraP, CameraP + Direction);
+
+		Angle += DtForFrame;
+		v3 LightP = V3(0.0f);
+		for(u32 EntityIndex = 0; EntityIndex < GameState->EntityCount; ++EntityIndex)
+		{
+			entity *Entity = GameState->Entities + EntityIndex;
+			switch(Entity->Type)
+			{
+				case EntityType_Light:
 				{
-					GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
-					GL_MAX_CUBE_MAP_TEXTURE_SIZE,
-					GL_MAX_DRAW_BUFFERS,
-					GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
-					GL_MAX_TEXTURE_IMAGE_UNITS,
-					GL_MAX_TEXTURE_SIZE,
-					GL_MAX_VARYING_FLOATS,
-					GL_MAX_VERTEX_ATTRIBS,
-					GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
-					GL_MAX_VERTEX_UNIFORM_COMPONENTS,
-					GL_MAX_VIEWPORT_DIMS,
-					GL_STEREO,
-				};
-				const char* GLParamNames[] =
-				{
-					"GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS",
-					"GL_MAX_CUBE_MAP_TEXTURE_SIZE",
-					"GL_MAX_DRAW_BUFFERS",
-					"GL_MAX_FRAGMENT_UNIFORM_COMPONENTS",
-					"GL_MAX_TEXTURE_IMAGE_UNITS",
-					"GL_MAX_TEXTURE_SIZE",
-					"GL_MAX_VARYING_FLOATS",
-					"GL_MAX_VERTEX_ATTRIBS",
-					"GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS",
-					"GL_MAX_VERTEX_UNIFORM_COMPONENTS",
-					"GL_MAX_VIEWPORT_DIMS",
-					"GL_STEREO",
-				};
+					v3 *P = &Entity->P;
+					P->x = 40.0f * cosf((Angle));
+					LightP = *P;
 
-				char *Vendor = (char *)glGetString(GL_VENDOR);
-				char *RendererName = (char *)glGetString(GL_RENDERER);
-				char *RendererVersion = (char *)glGetString(GL_VERSION);
-				char *ShadingLanguageVersion = (char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
-				printf("%s\n", Vendor);
-				printf("%s\n", RendererName);
-				printf("%s\n", RendererVersion);
-				printf("%s\n", ShadingLanguageVersion);
-				for(u32 Index = 0; Index < ArrayCount(GLParams); ++Index)
-				{
-					s32 Param = 0;
-					glGetIntegerv(GLParams[Index], &Param);
-					printf("%s %i\n", GLParamNames[Index], Param);
-				}
-
-				glEnable(GL_DEBUG_OUTPUT);
-				glDebugMessageCallback(GLDebugCallback, 0);
-				glEnable(GL_DEPTH_TEST);
-				glDepthFunc(GL_LESS);
-				glFrontFace(GL_CCW);
-				glEnable(GL_CULL_FACE);
-				glCullFace(GL_BACK);
-				glEnable(GL_MULTISAMPLE);
-				glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-				glEnable(GL_SAMPLE_ALPHA_TO_ONE);
-				glEnable(GL_BLEND);
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-				//
-				// NOTE(Justin): Assets
-				//
-
-				char *TextureFiles[] =
-				{
-					"textures\\checkerboard.jpg",
-					"textures\\awesomeface.png",
-					"textures\\brickwall.jpg",
-					"textures\\brickwall_normal.jpg",
-					"textures\\Vampire_diffuse_transparent.png",
-					"textures\\Vampire_specular.png",
-					"textures\\Vampire_diffuse.png",
-					"textures\\Vampire_emission.png",
-					"textures\\Vampire_normal.png",
-					"textures\\Paladin_diffuse.png",
-					"textures\\Paladin_specular.png",
-					"textures\\Paladin_normal.png",
-					"textures\\white.bmp"
-				};
-				char *ShaderFiles[] =
-				{
-					"shaders\\main.vs",
-					"shaders\\main.fs",
-					"shaders\\basic.vs",
-					"shaders\\basic.fs",
-					"shaders\\quad.vs",
-					"shaders\\quad.fs",
-				};
-				char *ModelFiles[] = 
-				{
-					"XBot.mesh",
-					"Sphere.mesh",
-					"VampireALusth.mesh",
-					"PaladinWithProp.mesh",
-				};
-				char *XBotAnimations[] =
-				{
-					"XBot_ActionIdle.animation",
-					"XBot_ActionIdleToStandingIdle.animation",
-					"XBot_FemaleWalk.animation",
-					"XBot_IdleLookAround.animation",
-					"XBot_IdleToSprint.animation",
-					"XBot_LeftTurn.animation",
-					"XBot_Pushing.animation",
-					"XBot_PushingStart.animation",
-					"XBot_PushingStop.animation",
-					"XBot_RightTurn.animation",
-					"XBot_RunToStop.animation",
-					"XBot_Running.animation",
-					"XBot_Running180.animation",
-					"XBot_RunningChangeDirection.animation",
-					"XBot_RunningToTurn.animation",
-					"XBot_Walking.animation",
-					"XBot_WalkingTurn180.animation"
-				};
-				char *VampireAnimations[] =
-				{
-					"Vampire_Walking.animation",
-					"Vampire_Bite.animation",
-				};
-				char *PaladinAnimations[] =
-				{
-					"Paladin_SwordAndShieldIdle.animation",
-				};
-
-				game_state GameState_ = {};
-				game_state *GameState = &GameState_;
-
-				texture *Texture = (texture *)GameState->Textures;
-				for(u32 TextureIndex = 0; TextureIndex < ArrayCount(TextureFiles); ++TextureIndex)
-				{
-					*Texture = TextureLoad(TextureFiles[TextureIndex]);
-					OpenGLAllocateTexture(Texture);
-					Texture++;
-				}
-
-				shader Shaders[3];
-				for(u32 ShaderIndex = 0; ShaderIndex < ArrayCount(Shaders); ++ShaderIndex)
-				{
-					Shaders[ShaderIndex] = ShaderLoad(ShaderFiles[2 * ShaderIndex], ShaderFiles[2 * ShaderIndex + 1]);
-					Shaders[ShaderIndex].Handle = GLProgramCreate(Shaders[ShaderIndex].VS, Shaders[ShaderIndex].FS);
-				}
-
-				//
-				// NOTE(Justin): Models
-				//
-
-				GameState->XBot = ModelLoad(Arena, "XBot.mesh");
-				model *XBot = &GameState->XBot;
-				XBot->Animations.Count = ArrayCount(XBotAnimations);
-				XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
-
-				GameState->Sphere = ModelLoad(Arena, "Sphere.mesh");
-				model *Sphere = &GameState->Sphere;
-
-				GameState->Cube = ModelLoad(Arena, "Cube.mesh");
-				model *Cube = &GameState->Cube;
-				Cube->Meshes[0].DiffuseTexture = GameState->Textures[2].Handle;
-				Cube->Meshes[0].NormalTexture = GameState->Textures[3].Handle;
-				Cube->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Normal);
-
-				GameState->Vampire = ModelLoad(Arena, "VampireALusth.mesh");
-				model *Vampire = &GameState->Vampire;
-				Vampire->Animations.Count = ArrayCount(VampireAnimations);
-				Vampire->Animations.Info = PushArray(Arena, Vampire->Animations.Count, animation_info);
-
-				Vampire->Meshes[0].DiffuseTexture = GameState->Textures[4].Handle;
-				Vampire->Meshes[0].SpecularTexture = GameState->Textures[5].Handle;
-				Vampire->Meshes[0].NormalTexture = GameState->Textures[8].Handle;
-				Vampire->Meshes[0].MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular);
-
-				GameState->Paladin = ModelLoad(Arena, "PaladinWithProp.mesh");
-				model *Paladin = &GameState->Paladin;
-				Paladin->Animations.Count = ArrayCount(PaladinAnimations);
-				Paladin->Animations.Info = PushArray(Arena, Paladin->Animations.Count, animation_info);
-				for(u32 MeshIndex = 0; MeshIndex < Paladin->MeshCount; ++MeshIndex)
-				{
-					mesh *Mesh = Paladin->Meshes + MeshIndex;
-					Mesh->DiffuseTexture = GameState->Textures[9].Handle;
-					Mesh->SpecularTexture = GameState->Textures[10].Handle;
-					Mesh->NormalTexture = GameState->Textures[11].Handle;
-					Mesh->MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular);
-				}
-
-				//
-				// NOTE(Justin): Animations
-				//
-
-				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(XBotAnimations); ++AnimIndex)
-				{
-					char *FileName = XBotAnimations[AnimIndex];
-					animation_info TestAnimation = AnimationLoad(Arena, FileName);
-					animation_info *Info = XBot->Animations.Info + AnimIndex;
-					*Info = TestAnimation;
-				}
-				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(VampireAnimations); ++AnimIndex)
-				{
-					char *FileName = VampireAnimations[AnimIndex];
-					animation_info TestAnimation = AnimationLoad(Arena, FileName);
-					animation_info *Info = Vampire->Animations.Info + AnimIndex;
-					*Info = TestAnimation;
-				}
-				for(u32 AnimIndex = 0; AnimIndex < ArrayCount(PaladinAnimations); ++AnimIndex)
-				{
-					char *FileName = PaladinAnimations[AnimIndex];
-					animation_info TestAnimation = AnimationLoad(Arena, FileName);
-					animation_info *Info = Paladin->Animations.Info + AnimIndex;
-					*Info = TestAnimation;
-				}
-
-				OpenGLAllocateAnimatedModel(XBot, Shaders[0].Handle);
-				OpenGLAllocateAnimatedModel(Vampire, Shaders[0].Handle);
-				OpenGLAllocateAnimatedModel(Paladin, Shaders[0].Handle);
-				OpenGLAllocateModel(Sphere, Shaders[1].Handle);
-				OpenGLAllocateModel(Cube, Shaders[1].Handle);
-
-				quad Quad = QuadDefault();
-				Quad.DiffuseTexture = GameState->Textures[2].Handle;
-				Quad.NormalTexture = GameState->Textures[3].Handle;
-				OpenGLAllocateQuad(&Quad, Shaders[2].Handle);
-
-				PlayerAdd(GameState);
-				VampireAdd(GameState);
-				LightAdd(GameState);
-				PaladinAdd(GameState);
-				BlockAdd(GameState);
-
-				f32 StartTime = 0.0f;
-				f32 EndTime = 0.0f;
-				f32 DtForFrame = 0.0f;
-				f32 Angle = 0.0f;
-				glfwSetTime(0.0);
-
-				//
-				// NOTE(Justin): Set all the uniforms that do not change during runtime.
-				//
-
-				glUseProgram(Shaders[0].Handle);
-				UniformMatrixSet(Shaders[0].Handle, "View", CameraTransform);
-				UniformMatrixSet(Shaders[0].Handle, "Projection", PerspectiveTransform);
-
-				glUseProgram(Shaders[1].Handle);
-				UniformMatrixSet(Shaders[1].Handle, "View", CameraTransform);
-				UniformMatrixSet(Shaders[1].Handle, "Projection", PerspectiveTransform);
-
-				glUseProgram(Shaders[2].Handle);
-				UniformMatrixSet(Shaders[2].Handle, "View", CameraTransform);
-				UniformMatrixSet(Shaders[2].Handle, "Projection", PerspectiveTransform);
-
-				v3 LightColor = V3(1.0f);
-				v3 Ambient = V3(0.1f);
-				while(!glfwWindowShouldClose(Window.Handle))
-				{
-					Angle += DtForFrame;
-
-					v3 LightP = V3(0.0f);
-					for(u32 EntityIndex = 0; EntityIndex < GameState->EntityCount; ++EntityIndex)
-					{
-						entity *Entity = GameState->Entities + EntityIndex;
-						switch(Entity->Type)
-						{
-							case EntityType_Player:
-							{
-							} break;
-							case EntityType_Vampire:
-							{
-							} break;
-							case EntityType_Light:
-							{
-								v3 *P = &Entity->P;
-								P->x = 20.0f * cosf((Angle));
-								LightP = *P;
-
-							} break;
-							case EntityType_Paladin:
-							{
-							} break;
-							case EntityType_Block:
-							{
-							} break;
-						}
-					}
-
-					//
-					// NOTE(Justin): Render.
-					//
-
-					glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-					for(u32 EntityIndex = 0; EntityIndex < GameState->EntityCount; ++EntityIndex)
-					{
-						entity *Entity = GameState->Entities + EntityIndex;
-						switch(Entity->Type)
-						{
-							case EntityType_Player:
-							{
-								glUseProgram(Shaders[0].Handle);
-								UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
-								UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
-								UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
-								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
-								mat4 Transform = EntityTransform(Entity, 0.1f);
-								AnimationUpdate(XBot, DtForFrame);
-								OpenGLDrawAnimatedModel(XBot, Shaders[0].Handle, Transform);
-							} break;
-							case EntityType_Vampire:
-							{
-								glUseProgram(Shaders[0].Handle);
-								UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
-								UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
-								UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
-								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
-								mat4 Transform = EntityTransform(Entity, 0.1f);
-								AnimationUpdate(Vampire, DtForFrame);
-								OpenGLDrawAnimatedModel(Vampire, Shaders[0].Handle, Transform);
-							} break;
-							case EntityType_Paladin:
-							{
-								glUseProgram(Shaders[0].Handle);
-								UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
-								UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
-								UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
-								UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
-								mat4 Transform = EntityTransform(Entity, 0.1f);
-								AnimationUpdate(Paladin, DtForFrame);
-								OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
-							} break;
-							case EntityType_Light:
-							{
-								glUseProgram(Shaders[1].Handle);
-								UniformV3Set(Shaders[1].Handle, "Diffuse", V3(1.0f));
-								mat4 Transform = EntityTransform(Entity);
-								OpenGLDrawModel(Sphere, Shaders[1].Handle, Transform);
-							} break;
-							case EntityType_Block:
-							{
-								mat4 Transform = EntityTransform(Entity, 3.0f);
-								glUseProgram(Shaders[1].Handle);
-								UniformV3Set(Shaders[1].Handle, "LightP", LightP);
-								//OpenGLDrawModel(Cube, Shaders[1].Handle, Transform);
-							} break;
-						}
-					}
-
-					glfwSwapBuffers(Window.Handle);
-
-					EndTime = (f32)glfwGetTime();
-					DtForFrame = EndTime - StartTime;
-					StartTime = EndTime;
-
-					glfwPollEvents();
-				}
+				} break;
 			}
 		}
+
+		//
+		// NOTE(Justin): Render.
+		//
+
+		glUseProgram(Shaders[0].Handle);
+		UniformMatrixSet(Shaders[0].Handle, "View", CameraTransform);
+		glUseProgram(Shaders[1].Handle);
+		UniformMatrixSet(Shaders[1].Handle, "View", CameraTransform);
+		glUseProgram(Shaders[2].Handle);
+		UniformMatrixSet(Shaders[2].Handle, "View", CameraTransform);
+
+		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		for(u32 EntityIndex = 0; EntityIndex < GameState->EntityCount; ++EntityIndex)
+		{
+			entity *Entity = GameState->Entities + EntityIndex;
+			switch(Entity->Type)
+			{
+				case EntityType_Player:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					AnimationUpdate(XBot, DtForFrame);
+					OpenGLDrawAnimatedModel(XBot, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Vampire:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					AnimationUpdate(&GameState->Vampire, DtForFrame);
+					OpenGLDrawAnimatedModel(&GameState->Vampire, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Paladin:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					AnimationUpdate(Paladin, DtForFrame);
+					OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Ninja:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					//AnimationUpdate(Ninja, DtForFrame);
+					//OpenGLDrawAnimatedModel(&GameState->Ninja, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Maria:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+
+					AnimationUpdate(Maria, DtForFrame);
+					OpenGLDrawAnimatedModel(Maria, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Brute:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					//ModelJointsUpdate(Brute, DtForFrame);
+					//ModelUpdate(Brute);
+					AnimationUpdate(&GameState->Brute, DtForFrame);
+					OpenGLDrawAnimatedModel(&GameState->Brute, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Mannequin:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					OpenGLDrawAnimatedModel(&GameState->Mannequin, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_ErikaArcher:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					AnimationUpdate(&GameState->ErikaArcher, DtForFrame);
+					OpenGLDrawAnimatedModel(&GameState->ErikaArcher, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_BulkyKnight:
+				{
+					glUseProgram(Shaders[0].Handle);
+					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
+					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
+					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
+					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
+					mat4 Transform = EntityTransform(Entity, 0.1f);
+					//AnimationUpdate(&GameState->Orc, DtForFrame);
+					OpenGLDrawAnimatedModel(&GameState->BulkyKnight, Shaders[0].Handle, Transform);
+				} break;
+				case EntityType_Light:
+				{
+					glUseProgram(Shaders[1].Handle);
+					UniformV3Set(Shaders[1].Handle, "Diffuse", V3(1.0f));
+					mat4 Transform = EntityTransform(Entity);
+					OpenGLDrawModel(Sphere, Shaders[1].Handle, Transform);
+				} break;
+				case EntityType_Block:
+				{
+					glUseProgram(Shaders[1].Handle);
+					UniformV3Set(Shaders[1].Handle, "LightP", LightP);
+					mat4 Transform = EntityTransform(Entity, 3.0f);
+					OpenGLDrawModel(&GameState->Cube, Shaders[1].Handle, Transform);
+				} break;
+			}
+		}
+
+		glfwSwapBuffers(Window.Handle);
+
+		EndTime = (f32)glfwGetTime();
+		DtForFrame = EndTime - StartTime;
+		StartTime = EndTime;
+
+		game_input *Temp = OldInput;
+		OldInput = NewInput;
+		NewInput = Temp;
 	}
 
 	return(0);
@@ -677,7 +913,7 @@ int main(int Argc, char **Argv)
 			string FileExt = StringFromRange((u8 *)AtExtension, (u8 *)(FileName + Length));
 			if(StringsAreSame(FileExt, ".dae"))
 			{
-				void *Memory = calloc(Megabyte(256), sizeof(u8));
+				void *Memory = calloc(Megabyte(1024), sizeof(u8));
 				if(Memory)
 				{
 					memory_arena Arena_;

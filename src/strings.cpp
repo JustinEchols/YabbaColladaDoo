@@ -530,7 +530,7 @@ ParseF32Array(memory_arena *Arena, f32 *Dest, u32 DestCount, string Str)
 }
 
 internal void
-ParseStringArray(memory_arena *Arena, string *Dest, u32 DestCount, string Str)
+ParseStringArray(memory_arena *Arena, string *Dest, string Str)
 {
 	char *Context;
 	char *Tok = strtok_s((char *)Str.Data, " \n\r", &Context);
@@ -585,3 +585,46 @@ AdvanceToNewLine(u8 **C)
 	}
 	(*C)++;
 }
+
+internal void
+GetFileName(char *Buffer, string FullPath)
+{
+	char *Last = (char *)(FullPath.Data + (FullPath.Size - 1));
+
+	u32 SlashIndex = 0;
+	while(*Last != '/' && *Last != '\\')
+	{
+		SlashIndex++;
+		Last--;
+	}
+
+	u32 BufferIndex = 0;
+	for(u32 CharIndex = ((u32)FullPath.Size - SlashIndex); CharIndex < FullPath.Size; ++CharIndex)
+	{
+		Buffer[BufferIndex++] = FullPath.Data[CharIndex];
+	}
+
+	Buffer[BufferIndex] = '\0';
+}
+
+internal void
+GetPathToFile(char *Buffer, string FullPath)
+{
+	char *Last = (char *)(FullPath.Data + (FullPath.Size - 1));
+
+	u32 SlashIndex = 0;
+	while(*Last != '/' && *Last != '\\')
+	{
+		SlashIndex++;
+		Last--;
+	}
+
+	u32 BufferIndex = 0;
+	for(u32 CharIndex = 0; CharIndex < ((u32)FullPath.Size - SlashIndex); ++CharIndex)
+	{
+		Buffer[BufferIndex++] = FullPath.Data[CharIndex];
+	}
+
+	Buffer[BufferIndex] = '\0';
+}
+

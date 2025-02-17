@@ -37,6 +37,12 @@ AnimationUpdate(model *Model, f32 dT)
 {
 	animation_info *AnimInfo = Model->Animations.Info + Model->Animations.Index;
 
+	if(!AnimInfo || !AnimInfo->KeyFrames)
+	{
+		// Temporary!
+		return;
+	}
+
 	AnimInfo->CurrentTime += dT;
 	u32 KeyFrameIndex = AnimInfo->KeyFrameIndex;
 	f32 KeyFrameDt = KeyFrameDeltaTime(AnimInfo->Times, KeyFrameIndex);
@@ -65,6 +71,7 @@ AnimationUpdate(model *Model, f32 dT)
 	for(u32 MeshIndex = 0; MeshIndex < Model->MeshCount; ++MeshIndex)
 	{
 		mesh *Mesh = Model->Meshes + MeshIndex;
+
 		joint RootJoint = Mesh->Joints[0];
 		mat4 RootJointT = RootJoint.Transform;
 		mat4 RootInvBind = Mesh->InvBindTransforms[0];
@@ -95,6 +102,96 @@ AnimationUpdate(model *Model, f32 dT)
 
 			Mesh->JointTransforms[Index] = JointTransform;
 			Mesh->ModelSpaceTransforms[Index] = JointTransform * InvBind;
+		}
+	}
+}
+
+internal void
+ModelJointsUpdate(model *Model, f32 dT)
+{
+	animation_info *AnimInfo = Model->Animations.Info + Model->Animations.Index;
+	
+
+	if(!AnimInfo || !AnimInfo->KeyFrames)
+	{
+		// Temporary!
+		return;
+	}
+
+	AnimInfo->CurrentTime += dT;
+	u32 KeyFrameIndex = AnimInfo->KeyFrameIndex;
+	f32 KeyFrameDt = KeyFrameDeltaTime(AnimInfo->Times, KeyFrameIndex);
+	f32 t = (AnimInfo->CurrentTime - AnimInfo->Times[KeyFrameIndex]) / KeyFrameDt;
+	if(t >= 1.0f)
+	{
+		AnimInfo->KeyFrameIndex += 1;
+		if(AnimInfo->KeyFrameIndex >= (AnimInfo->KeyFrameCount - 1))
+		{
+			AnimInfo->KeyFrameIndex = 0;
+			AnimInfo->CurrentTime = dT;
+
+			// NOTE(Justin): Test code
+			Model->Animations.Index += 1;
+			if(Model->Animations.Index >= Model->Animations.Count)
+			{
+				Model->Animations.Index = 0;
+			}
+		}
+
+		t = (AnimInfo->CurrentTime - AnimInfo->Times[KeyFrameIndex]) / KeyFrameDeltaTime(AnimInfo->Times, AnimInfo->KeyFrameIndex);
+	}
+
+	key_frame *KeyFrame = AnimInfo->KeyFrames + AnimInfo->KeyFrameIndex;
+	key_frame *NextKeyFrame = AnimInfo->KeyFrames + (AnimInfo->KeyFrameIndex + 1);
+
+	joint *Joints = Model->Skeleton.Joints;
+
+	joint RootJoint = Joints[0];
+	mat4 RootJointT = RootJoint.Transform;
+
+	u32 JointIndex = JointIndexGet(AnimInfo->JointNames, AnimInfo->JointCount, RootJoint.Name);
+	if(JointIndex != -1)
+	{
+		RootJointT = KeyFrameInterpolatedTransform(KeyFrame, t, NextKeyFrame, JointIndex);
+	}
+
+	Model->Skeleton.JointTransforms[0] = RootJointT;
+
+	for(u32 Index = 1; Index < Model->Skeleton.JointCount; ++Index)
+	{
+		joint *Joint = Joints + Index;
+		mat4 JointTransform = Joint->Transform;
+
+		JointIndex = JointIndexGet(AnimInfo->JointNames, AnimInfo->JointCount, Joint->Name);
+		if(JointIndex != -1)
+		{
+			JointTransform = KeyFrameInterpolatedTransform(KeyFrame, t, NextKeyFrame, JointIndex);
+		}
+
+		mat4 ParentTransform = Model->Skeleton.JointTransforms[Joint->ParentIndex];
+		JointTransform = ParentTransform * JointTransform;
+		Model->Skeleton.JointTransforms[Index] = JointTransform;
+	}
+}
+
+internal void 
+ModelUpdate(model *Model)
+{
+	for(u32 MeshIndex = 0; MeshIndex < Model->MeshCount; ++MeshIndex)
+	{
+		mesh *Mesh = Model->Meshes + MeshIndex;
+		mat4 Bind = Mesh->BindTransform;
+		for(u32 Index = 0; Index < Model->Skeleton.JointCount; ++Index)
+		{
+			joint *Joint = Model->Skeleton.Joints + Index;
+			mat4 JointTransform = Model->Skeleton.JointTransforms[Index];
+
+			s32 JointIndex = JointIndexGet(Mesh->JointNames, Mesh->JointCount, Joint->Name);
+			if(JointIndex != -1)
+			{
+				mat4 InvBind = Mesh->InvBindTransforms[JointIndex];
+				Mesh->ModelSpaceTransforms[JointIndex] = JointTransform *InvBind;
+			}
 		}
 	}
 }

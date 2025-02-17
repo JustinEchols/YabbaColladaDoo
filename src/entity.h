@@ -7,6 +7,14 @@ enum entity_type
 	EntityType_Light,
 	EntityType_Block,
 	EntityType_Paladin,
+	EntityType_Ninja,
+	EntityType_Arissa,
+	EntityType_Maria,
+	EntityType_Vangaurd,
+	EntityType_Brute,
+	EntityType_Mannequin,
+	EntityType_ErikaArcher,
+	EntityType_BulkyKnight,
 };
 
 struct entity

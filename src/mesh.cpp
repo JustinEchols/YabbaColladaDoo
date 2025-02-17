@@ -66,6 +66,7 @@ JointsGet(memory_arena *Arena, xml_node *Root, string *JointNames, u32 JointCoun
 	}
 }
 
+
 internal animation_info 
 AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
 {
@@ -211,422 +212,9 @@ AnimationInitFromCollada(memory_arena *Arena, char *DaeFileName)
 	return(Info);
 }
 
-#if 0
-// TODO(Justin): Debug by testing other collada files.
-internal model 
-ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
-{
-	model Model = {};
+#if 1
 
-	xml_node *Root = DaeFile.Root;
-
-	xml_node LibImages = {};
-	xml_node LibMaterials = {};
-	xml_node LibEffects = {};
-	xml_node LibGeometry = {};
-	xml_node LibControllers = {};
-	xml_node LibVisScenes = {};
-	xml_node Triangles = {};
-
-	NodeGet(Root, &LibMaterials, "library_images");
-	NodeGet(Root, &LibMaterials, "library_materials");
-	NodeGet(Root, &LibEffects, "library_effects");
-	NodeGet(Root, &LibGeometry, "library_geometries");
-	NodeGet(Root, &LibControllers, "library_controllers");
-	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
-
-	//
-	// NOTE(Justin): The number of meshes is the number of children that
-	// library_geometries has. Each geometry node has AT MOST one mesh child
-	// node. The LAST CHILD NODE of a mesh node contains two things. A)
-	// Where to find positions, normals, UVs, colors and B) The indices of the
-	// mesh.
-	//
-
-	u32 MeshCount = LibGeometry.ChildrenCount;
-	Model.MeshCount = MeshCount;
-	Model.Meshes = PushArray(Arena, Model.MeshCount, mesh);
-	for(u32 MeshIndex = 0; MeshIndex < MeshCount; ++MeshIndex)
-	{
-		mesh Mesh = {};
-
-		if(LibMaterials.ChildrenCount != 0)
-		{
-			xml_node *Mat = LibMaterials.Children[MeshIndex];
-			string EffectNodeName = NodeAttributeValueGet(Mat->Children[0], "url");
-			EffectNodeName.Data++;
-			EffectNodeName.Size--;
-
-			xml_node Effect = {};
-			xml_node Phong = {};
-			NodeGet(Root, &Effect, "effect", (char *)EffectNodeName.Data);
-			NodeGet(&Effect, &Phong, "phong");
-
-			for(s32 k = 0; k < Phong.ChildrenCount; ++k)
-			{
-				xml_node *Child = Phong.Children[k];
-				if(StringsAreSame(Child->Tag, "ambient"))
-				{
-					xml_node Color = *Child->Children[0];
-					ParseF32Array(&Mesh.MaterialSpec.Ambient.E[0], 4, Color.InnerText);
-				}
-
-				if(StringsAreSame(Child->Tag, "diffuse"))
-				{
-					xml_node Color = *Child->Children[0];
-					ParseF32Array(&Mesh.MaterialSpec.Diffuse.E[0], 4, Color.InnerText);
-				}
-
-				if(StringsAreSame(Child->Tag, "specular"))
-				{
-					xml_node Color = *Child->Children[0];
-					ParseF32Array(&Mesh.MaterialSpec.Specular.E[0], 4, Color.InnerText);
-				}
-
-				if(StringsAreSame(Child->Tag, "shininess"))
-				{
-					xml_node Color = *Child->Children[0];
-					Mesh.MaterialSpec.Shininess = F32FromASCII(Color.InnerText);
-				}
-			}
-		}
-
-		xml_node *Geometry = LibGeometry.Children[MeshIndex];
-
-		Mesh.Name = NodeAttributeValueGet(Geometry, "name");
-
-		xml_node *MeshNode = Geometry->Children[0];
-		Triangles = *MeshNode->Children[MeshNode->ChildrenCount - 1];
-
-		xml_node NodeIndex = {};
-		xml_node NodePos = {};
-		xml_node NodeNormal = {};
-		xml_node NodeUV = {};
-		xml_node NodeColor = {};
-
-		s32 AttributeCount = 0;
-		for(s32 k = 0; k < Triangles.ChildrenCount; ++k)
-		{
-			xml_node *Node = Triangles.Children[k];
-			if(StringsAreSame(Node->Tag, "input"))
-			{
-				AttributeCount++;
-			}
-		}
-
-		// TODO(Justin): Need different way of handling different number of attributes/vertex
-		Assert(AttributeCount == 3);
-
-		for(s32 k = 0; k < AttributeCount; ++k)
-		{
-			xml_node N = {};
-			xml_node *Node = Triangles.Children[k];
-
-			string Semantic = Node->Attributes[0].Value;
-			string Value = NodeAttributeValueGet(Node, "source");
-
-			Value.Data++;
-			Value.Size--;
-
-			if(StringsAreSame(Semantic, "VERTEX"))
-			{
-				NodeGet(Geometry, &N, "vertices", (char *)Value.Data);
-				N = *(N.Children[0]);
-
-				Value = NodeAttributeValueGet(&N, "source");
-				Value.Data++;
-				Value.Size--;
-
-				N = {};
-				NodeGet(Geometry, &N, "source", (char *)Value.Data);
-
-				NodePos = *(N.Children[0]);
-			}
-			else if(StringsAreSame(Semantic, "NORMAL"))
-			{
-				NodeGet(Geometry, &N, "source", (char *)Value.Data);
-				NodeNormal = *(N.Children[0]);
-			}
-			else if(StringsAreSame(Semantic, "TEXCOORD"))
-			{
-				NodeGet(Geometry, &N, "source", (char *)Value.Data);
-				NodeUV = *(N.Children[0]);
-			}
-			else if(StringsAreSame(Semantic, "COLOR"))
-			{
-				NodeGet(Geometry, &N, "float_array", (char *)Value.Data);
-				NodeColor = *(N.Children[0]);
-			}
-		}
-
-		NodeGet(Geometry, &NodeIndex, "p");
-
-		u32 TriangleCount = U32FromAttributeValue(NodeIndex.Parent);
-		u32 IndicesCount = 3 * 3 * TriangleCount;
-		u32 PositionCount = U32FromAttributeValue(&NodePos);
-		u32 NormalCount = U32FromAttributeValue(&NodeNormal);
-		u32 UVCount = U32FromAttributeValue(&NodeUV);
-
-		u32 *Indices = PushArray(Arena, IndicesCount, u32);
-		f32 *Positions = PushArray(Arena, PositionCount, f32);
-		f32 *Normals = PushArray(Arena, NormalCount, f32);
-		f32 *UV = PushArray(Arena, UVCount, f32);
-
-		ParseU32Array(Indices, IndicesCount, NodeIndex.InnerText);
-		ParseF32Array(Positions, PositionCount, NodePos.InnerText);
-		ParseF32Array(Normals, NormalCount, NodeNormal.InnerText);
-		ParseF32Array(UV, UVCount, NodeUV.InnerText);
-
-		Mesh.VertexCount = IndicesCount/3;
-		Mesh.Vertices = PushArray(Arena, Mesh.VertexCount, vertex);
-		Mesh.IndicesCount = IndicesCount/3;
-		Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
-
-		u32 Stride3 = 3;
-		u32 Stride2 = 2;
-		for(u32 VertexIndex = 0; VertexIndex < Mesh.VertexCount; ++VertexIndex)
-		{
-			Mesh.Indices[VertexIndex] = VertexIndex;
-
-			vertex *V = Mesh.Vertices + VertexIndex;
-
-			u32 IndexP = Indices[3 * VertexIndex + 0];
-			u32 IndexN = Indices[3 * VertexIndex + 1];
-			u32 IndexUV = Indices[3 * VertexIndex + 2];
-
-			V->P.x = Positions[Stride3 * IndexP + 0];
-			V->P.y = Positions[Stride3 * IndexP + 1];
-			V->P.z = Positions[Stride3 * IndexP + 2];
-
-			V->N.x = Normals[Stride3 * IndexN + 0];
-			V->N.y = Normals[Stride3 * IndexN + 1];
-			V->N.z = Normals[Stride3 * IndexN + 2];
-
-			V->UV.x = UV[Stride2 * IndexUV + 0];
-			V->UV.y = UV[Stride2 * IndexUV + 1];
-		}
-
-		//
-		// NOTE(Jusitn): Skeletion info
-		//
-
-		//
-		// NOTE(Justin): The children of library controllers are controller nodes.
-		// IF WE ASSUME THAT EACH MESH HAS A CONTROLLER THEN THE CONTROLLERS ARE IN
-		// MESH ORDER. This is the approach that is taken. If this does not work
-		// in general (i.e. a mesh may not have a controller) then we will need to
-		// get the controller of the mesh by way of libaray_visual_scenes.
-		//
-
-
-		//
-		// NOTE(Justin): Get the controller of the current mesh.
-		//
-
-		// TODO(Justin): Move this to an appropriate position.
-		u32 JointCount = 0;
-		string *JointNames = 0;
-		if(LibControllers.ChildrenCount != 0)
-		{
-			Assert(Model.MeshCount == (u32)LibControllers.ChildrenCount);
-			xml_node Controller = {};
-			Controller = *LibControllers.Children[MeshIndex];
-
-
-			if(Controller.ChildrenCount != 0)
-			{
-				xml_node BindShape = {};
-				NodeGet(&Controller, &BindShape, "bind_shape_matrix");
-
-				ParseF32Array(&Mesh.BindTransform.E[0][0], 16, BindShape.InnerText);
-
-
-				//string *JointNames = PushArray(Arena, Mesh.JointCount, string);
-				//ParseColladaStringArray(Arena, &Controller, &Mesh.JointNames, &Mesh.JointCount);
-				ParseColladaStringArray(Arena, &Controller, &JointNames, &JointCount);
-
-				Mesh.JointCount = JointCount;
-
-				Assert(JointNames);
-				Assert(Mesh.JointCount != 0);
-
-				Mesh.JointTransforms = PushArray(Arena, Mesh.JointCount, mat4);
-				Mesh.ModelSpaceTransforms = PushArray(Arena, Mesh.JointCount, mat4);
-
-				mat4 I = Mat4Identity();
-				for(u32 MatIndex = 0; MatIndex < Mesh.JointCount; ++MatIndex)
-				{
-					Mesh.JointTransforms[MatIndex] = I;
-					Mesh.ModelSpaceTransforms[MatIndex] = I;
-				}
-
-				xml_node SourceNode = NodeSourceGet(&Controller, "input", "INV_BIND_MATRIX");
-				Assert(SourceNode.Tag.Size != 0);
-
-				string StrCount = NodeAttributeValueGet(&SourceNode, "count");
-				u32 Count = U32FromASCII(StrCount.Data);
-
-				xml_node AccessorNode = {};
-				NodeGet(SourceNode.Parent, &AccessorNode, "accessor");
-
-				string StrStride = NodeAttributeValueGet(&AccessorNode, "stride");
-				u32 Stride = 0;
-				if(StrStride.Size == 0)
-				{
-					Stride = 1;
-				}
-				else
-				{
-					Stride = U32FromASCII(StrStride.Data);
-				}
-
-				//*DestCount = Count / Stride;
-				//*Dest = PushArray(Arena, Count, f32);
-
-				//u32 DestCount = Count / Stride;
-				Mesh.InvBindTransforms = PushArray(Arena, Mesh.JointCount, mat4);
-				ParseF32Array(&Mesh.InvBindTransforms->E[0][0], Count, SourceNode.InnerText);
-
-
-
-				//f32 *M = &Mesh.InvBindTransforms->E[0][0];
-				//ParseColladaFloatArray(Arena, &Controller, &M, &Mesh.JointCount, "input", "INV_BIND_MATRIX");
-
-				Assert(Mesh.InvBindTransforms);
-
-				u32 WeightCount;
-				f32 *Weights;
-				ParseColladaFloatArray(Arena, &Controller, &Weights, &WeightCount, "input", "WEIGHT");
-
-				Assert(Weights);
-				Assert(WeightCount != 0);
-
-				// NOTE(Justin): This node contains information for each vertex how many joints affect the vertex, what joints affect the vertex,
-				// and how each one of the joints affects the vertex.
-				xml_node VertexWeights = {};
-				NodeGet(&Controller, &VertexWeights, "vertex_weights");
-
-				u32 JointInfoCount = U32FromAttributeValue(&VertexWeights);
-				u32 *JointCountArray = PushArray(Arena, JointInfoCount, u32);
-				joint_info *JointInfoArray = PushArray(Arena, JointInfoCount, joint_info);
-
-				Assert(JointInfoCount == (PositionCount/3));
-				Assert(JointCountArray);
-
-				ParseColladaU32Array(Arena, &Controller, &JointCountArray, JointInfoCount, "vcount");
-
-				xml_node NodeJointsAndWeights = {};
-				NodeGet(&Controller, &NodeJointsAndWeights, "v");
-
-				//
-				// NOTE(Justin): The joint count array is a list of #'s for each
-				// vertex. The # is how many joints affect the vertex.
-				// In order to get the count of all the joint indices and weights add up all the #'s
-				// and multiply the sum by 2. 
-				//
-
-				u32 JointsAndWeightsCount = 2 * ArraySum(JointCountArray, JointInfoCount);
-				u32 *JointsAndWeights = PushArray(Arena, JointsAndWeightsCount, u32);
-				ParseU32Array(JointsAndWeights, JointsAndWeightsCount, NodeJointsAndWeights.InnerText);
-
-				u32 JointsAndWeightsIndex = 0;
-				for(u32 Index = 0; Index < JointInfoCount; ++Index)
-				{
-					joint_info *JointInfo = JointInfoArray + Index;
-					u32 JointCountForVertex = JointCountArray[Index];
-					JointInfo->Count = JointCountForVertex;
-
-					f32 Sum = 0.0f;
-					for(u32 k = 0; k < JointInfo->Count; ++k)
-					{
-						JointInfo->JointIndex[k] = JointsAndWeights[JointsAndWeightsIndex++];
-						u32 WeightIndex = JointsAndWeights[JointsAndWeightsIndex++];
-						JointInfo->Weights[k] = Weights[WeightIndex];
-						Sum += JointInfo->Weights[k];
-					}
-
-					if(Sum != 0.0f)
-					{
-						JointInfo->Weights[0] /= Sum;
-						JointInfo->Weights[1] /= Sum;
-						JointInfo->Weights[2] /= Sum;
-					}
-				}
-
-				for(u32 VertexIndex = 0; VertexIndex < Mesh.VertexCount; ++VertexIndex)
-				{
-					vertex *V = Mesh.Vertices + VertexIndex;
-					u32 IndexP = Indices[3 * VertexIndex];
-					V->JointInfo = JointInfoArray[IndexP];
-				}
-			}
-		}
-
-
-		if((LibVisScenes.ChildrenCount != 0) && (LibControllers.ChildrenCount != 0))
-		{
-			Mesh.Joints = PushArray(Arena, Mesh.JointCount, joint);
-
-			//
-			// NOTE(Justin): The last nodes of visual scene contain the name of the
-			// node where the root joint of the joint hierarchy can be found.
-			// This is in the <skeleton> node. This approach also assumes they
-			// are in mesh order. Meaning the last skeleton is the skeleton of
-			// the last mesh. the second to last skeleton is the skeleton of
-			// the second to last mesh and so on.
-			//
-
-			u32 ChildIndex = (LibVisScenes.Children[0]->ChildrenCount - Model.MeshCount) + MeshIndex;
-			xml_node SkeletonParentNode = *LibVisScenes.Children[0]->Children[ChildIndex];
-
-			xml_node Skeleton = {};
-			NodeGet(&SkeletonParentNode, &Skeleton, "skeleton");
-
-			string JointRootName = Skeleton.InnerText;
-			JointRootName.Data++;
-			JointRootName.Size--;
-
-			xml_node JointRoot = {};
-			NodeGet(&LibVisScenes, &JointRoot, "node", (char *)JointRootName.Data);
-			if(JointRoot.ChildrenCount != 0)
-			{
-				joint *Joints = Mesh.Joints;
-				Joints->Name = JointNames[0];
-				Joints->ParentIndex = -1;
-				ParseF32Array(Arena, &Joints->Transform.E[0][0], 16, JointRoot.Children[0]->InnerText);
-
-				u32 JointIndex = 1;
-				JointsGet(Arena, &JointRoot, JointNames, Mesh.JointCount, Joints, &JointIndex);
-			}
-		}
-
-		Model.Meshes[MeshIndex] = Mesh;
-	}
-
-	//
-	// NOTE(Justin): Pre-multiply bind transform with each joints inverse bind
-	// transform.
-	//
-
-	for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
-	{
-		mesh *Mesh = Model.Meshes + MeshIndex;
-		mat4 Bind = Mesh->BindTransform;
-		for(u32 Index = 0; Index < Mesh->JointCount; ++Index)
-		{
-			mat4 InvBind = Mesh->InvBindTransforms[Index];
-			Mesh->InvBindTransforms[Index] = InvBind * Bind;
-		}
-	}
-
-	if(LibControllers.ChildrenCount != 0)
-	{
-		Model.HasSkeleton = true;
-	}
-
-	return(Model);
-}
-#else
+// TODO(Justin): Clean this up.
 internal model 
 ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 {
@@ -649,68 +237,41 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 	NodeGet(Root, &LibControllers, "library_controllers");
 	NodeGet(Root, &LibVisScenes, "library_visual_scenes");
 
-	//
 	// NOTE(Justin): The number of meshes is the number of children that
 	// library_geometries has. Each geometry node has AT MOST one mesh child
 	// node. The LAST CHILD NODE of a mesh node contains two things. A)
 	// Where to find positions, normals, UVs, colors and B) The indices of the
 	// mesh.
-	//
 
-	u32 MeshCount = LibGeometry.ChildrenCount;
-	Model.MeshCount = MeshCount;
+	// NOTE/TODO(Justin): Parse the file bottom up. The visual scene node seems to have nodes
+	// that point to all the data needed to load the model
+
+	// NOTE(Justin): The number of textures used in the model is the number of children of the LibImages
+	// node
+
+	// TODO(Justin): Allocate texture array up front. Each mesh can index into this array to pull out the correct
+	// material for the mesh.
+
+	Model.FullPath = DaeFile.FullPath;
+
+	Model.MeshCount = LibGeometry.ChildrenCount;
 	Model.Meshes = PushArray(Arena, Model.MeshCount, mesh);
-	for(u32 MeshIndex = 0; MeshIndex < MeshCount; ++MeshIndex)
+
+	for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 	{
 		mesh Mesh = {};
 
-		if((LibImages.ChildrenCount == 0) &&
-		   (LibMaterials.ChildrenCount != 0))
-		{
-			xml_node *Mat = LibMaterials.Children[MeshIndex];
-			string EffectNodeName = NodeAttributeValueGet(Mat->Children[0], "url");
-			EffectNodeName.Data++;
-			EffectNodeName.Size--;
-
-			xml_node Effect = {};
-			xml_node Phong = {};
-			NodeGet(Root, &Effect, "effect", (char *)EffectNodeName.Data);
-			NodeGet(&Effect, &Phong, "phong");
-			for(s32 k = 0; k < Phong.ChildrenCount; ++k)
-			{
-				xml_node *Child = Phong.Children[k];
-				if(StringsAreSame(Child->Tag, "ambient"))
-				{
-					xml_node Color = *Child->Children[0];
-					ParseF32Array(&Mesh.MaterialSpec.Ambient.E[0], 4, Color.InnerText);
-				}
-
-				if(StringsAreSame(Child->Tag, "diffuse"))
-				{
-					xml_node Color = *Child->Children[0];
-					ParseF32Array(&Mesh.MaterialSpec.Diffuse.E[0], 4, Color.InnerText);
-				}
-
-				if(StringsAreSame(Child->Tag, "specular"))
-				{
-					xml_node Color = *Child->Children[0];
-					ParseF32Array(&Mesh.MaterialSpec.Specular.E[0], 4, Color.InnerText);
-				}
-
-				if(StringsAreSame(Child->Tag, "shininess"))
-				{
-					xml_node Color = *Child->Children[0];
-					Mesh.MaterialSpec.Shininess = F32FromASCII(Color.InnerText);
-				}
-			}
-		}
-
 		xml_node *Geometry = LibGeometry.Children[MeshIndex];
-
 		Mesh.Name = NodeAttributeValueGet(Geometry, "name");
 
+		Triangles = {};
 		xml_node *MeshNode = Geometry->Children[0];
-		Triangles = *MeshNode->Children[MeshNode->ChildrenCount - 1];
+		NodeGet(MeshNode, &Triangles, "polylist");
+		if(Triangles.Tag.Size == 0)
+		{
+			NodeGet(MeshNode, &Triangles, "triangles");
+		}
+		Assert(Triangles.Tag.Size != 0);
 
 		xml_node NodeIndex = {};
 		xml_node NodePos = {};
@@ -728,8 +289,8 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			}
 		}
 
-		// TODO(Justin): Need different way of handling different number of attributes/vertex
-		Assert(AttributeCount == 3);
+		// Models should have at least 3 attributes: positions, normals, and uvs.
+		Assert(AttributeCount >= 3);
 
 		for(s32 k = 0; k < AttributeCount; ++k)
 		{
@@ -763,8 +324,11 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			}
 			else if(StringsAreSame(Semantic, "TEXCOORD"))
 			{
-				NodeGet(Geometry, &N, "source", (char *)Value.Data);
-				NodeUV = *(N.Children[0]);
+				if(NodeUV.Tag.Size == 0)
+				{
+					NodeGet(Geometry, &N, "source", (char *)Value.Data);
+					NodeUV = *(N.Children[0]);
+				}
 			}
 			else if(StringsAreSame(Semantic, "COLOR"))
 			{
@@ -773,10 +337,14 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			}
 		}
 
-		NodeGet(Geometry, &NodeIndex, "p");
+		//NodeGet(Geometry, &NodeIndex, "p");
+		NodeGet(&Triangles, &NodeIndex, "p");
 
 		u32 TriangleCount = U32FromAttributeValue(NodeIndex.Parent);
-		u32 IndicesCount = 3 * 3 * TriangleCount;
+		u32 AttributesPerVertex = AttributeCount;
+		u32 VerticesPerTriangle = 3;
+
+		u32 IndicesCount = AttributesPerVertex * VerticesPerTriangle * TriangleCount;
 		u32 PositionCount = U32FromAttributeValue(&NodePos);
 		u32 NormalCount = U32FromAttributeValue(&NodeNormal);
 		u32 UVCount = U32FromAttributeValue(&NodeUV);
@@ -791,9 +359,9 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		ParseF32Array(Normals, NormalCount, NodeNormal.InnerText);
 		ParseF32Array(UV, UVCount, NodeUV.InnerText);
 
-		Mesh.VertexCount = IndicesCount/3;
+		Mesh.VertexCount = IndicesCount/AttributeCount;
 		Mesh.Vertices = PushArray(Arena, Mesh.VertexCount, vertex);
-		Mesh.IndicesCount = IndicesCount/3;
+		Mesh.IndicesCount = Mesh.VertexCount;
 		Mesh.Indices = PushArray(Arena, Mesh.IndicesCount, u32);
 
 		u32 Stride3 = 3;
@@ -804,9 +372,9 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 			vertex *V = Mesh.Vertices + VertexIndex;
 
-			u32 IndexP = Indices[3 * VertexIndex + 0];
-			u32 IndexN = Indices[3 * VertexIndex + 1];
-			u32 IndexUV = Indices[3 * VertexIndex + 2];
+			u32 IndexP = Indices[AttributeCount * VertexIndex + 0];
+			u32 IndexN = Indices[AttributeCount * VertexIndex + 1];
+			u32 IndexUV = Indices[AttributeCount * VertexIndex + 2];
 
 			V->P.x = Positions[Stride3 * IndexP + 0];
 			V->P.y = Positions[Stride3 * IndexP + 1];
@@ -818,14 +386,6 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 			V->UV.x = UV[Stride2 * IndexUV + 0];
 			V->UV.y = UV[Stride2 * IndexUV + 1];
-
-			if(VertexIndex <= 64)
-			{
-				printf("vertex %d\n", VertexIndex);
-				printf("%f %f %f\n", V->P.x, V->P.y, V->P.z);
-				printf("%f %f %f\n", V->N.x, V->N.y, V->N.z);
-				printf("%f %f\n", V->UV.x, V->UV.y);
-			}
 		}
 
 		//
@@ -846,35 +406,27 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		//
 
 		// TODO(Justin): Move this to an appropriate position.
-		u32 JointCount = 0;
-		string *JointNames = 0;
 		if(LibControllers.ChildrenCount != 0)
 		{
 			Assert(Model.MeshCount == (u32)LibControllers.ChildrenCount);
 			xml_node Controller = {};
 			Controller = *LibControllers.Children[MeshIndex];
 
-
 			if(Controller.ChildrenCount != 0)
 			{
 				xml_node BindShape = {};
 				NodeGet(&Controller, &BindShape, "bind_shape_matrix");
-
 				ParseF32Array(&Mesh.BindTransform.E[0][0], 16, BindShape.InnerText);
 
-
-				//string *JointNames = PushArray(Arena, Mesh.JointCount, string);
-				//ParseColladaStringArray(Arena, &Controller, &Mesh.JointNames, &Mesh.JointCount);
-				ParseColladaStringArray(Arena, &Controller, &JointNames, &JointCount);
-
-				Mesh.JointCount = JointCount;
-
-				Assert(JointNames);
+				xml_node NameArray = {};
+				NodeGet(&Controller, &NameArray, "Name_array");
+				Mesh.JointCount = U32FromAttributeValue(&NameArray);
 				Assert(Mesh.JointCount != 0);
+				Mesh.JointNames = PushArray(Arena, Mesh.JointCount, string);
+				ParseStringArray(Arena, Mesh.JointNames, NameArray.InnerText);
 
 				Mesh.JointTransforms = PushArray(Arena, Mesh.JointCount, mat4);
 				Mesh.ModelSpaceTransforms = PushArray(Arena, Mesh.JointCount, mat4);
-
 				mat4 I = Mat4Identity();
 				for(u32 MatIndex = 0; MatIndex < Mesh.JointCount; ++MatIndex)
 				{
@@ -884,43 +436,18 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 				xml_node SourceNode = NodeSourceGet(&Controller, "input", "INV_BIND_MATRIX");
 				Assert(SourceNode.Tag.Size != 0);
+				u32 Count = U32FromAttributeValue(&SourceNode);
+				Assert(Count != 0);
 
-				string StrCount = NodeAttributeValueGet(&SourceNode, "count");
-				u32 Count = U32FromASCII(StrCount.Data);
+				Mesh.InvBindTransforms = PushArray(Arena, Mesh.JointCount, mat4);
+				ParseF32Array(&Mesh.InvBindTransforms->E[0][0], Count, SourceNode.InnerText);
 
 				xml_node AccessorNode = {};
 				NodeGet(SourceNode.Parent, &AccessorNode, "accessor");
 
-				string StrStride = NodeAttributeValueGet(&AccessorNode, "stride");
-				u32 Stride = 0;
-				if(StrStride.Size == 0)
-				{
-					Stride = 1;
-				}
-				else
-				{
-					Stride = U32FromASCII(StrStride.Data);
-				}
-
-				//*DestCount = Count / Stride;
-				//*Dest = PushArray(Arena, Count, f32);
-
-				//u32 DestCount = Count / Stride;
-				Mesh.InvBindTransforms = PushArray(Arena, Mesh.JointCount, mat4);
-				ParseF32Array(&Mesh.InvBindTransforms->E[0][0], Count, SourceNode.InnerText);
-
-
-
-				//f32 *M = &Mesh.InvBindTransforms->E[0][0];
-				//ParseColladaFloatArray(Arena, &Controller, &M, &Mesh.JointCount, "input", "INV_BIND_MATRIX");
-
-				Assert(Mesh.InvBindTransforms);
-
 				u32 WeightCount;
 				f32 *Weights;
 				ParseColladaFloatArray(Arena, &Controller, &Weights, &WeightCount, "input", "WEIGHT");
-
-				Assert(Weights);
 				Assert(WeightCount != 0);
 
 				// NOTE(Justin): This node contains information for each vertex how many joints affect the vertex, what joints affect the vertex,
@@ -929,12 +456,13 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 				NodeGet(&Controller, &VertexWeights, "vertex_weights");
 
 				u32 JointInfoCount = U32FromAttributeValue(&VertexWeights);
+				Assert(JointInfoCount != 0);
+				Assert(JointInfoCount == (PositionCount/3));
 				u32 *JointCountArray = PushArray(Arena, JointInfoCount, u32);
 				joint_info *JointInfoArray = PushArray(Arena, JointInfoCount, joint_info);
 
-				Assert(JointInfoCount == (PositionCount/3));
-				Assert(JointCountArray);
 
+				// This array is an array of u32s each of which tells how many joints affects the vertex
 				ParseColladaU32Array(Arena, &Controller, &JointCountArray, JointInfoCount, "vcount");
 
 				xml_node NodeJointsAndWeights = {};
@@ -969,37 +497,62 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 
 					if(Sum != 0.0f)
 					{
-						JointInfo->Weights[0] /= Sum;
-						JointInfo->Weights[1] /= Sum;
-						JointInfo->Weights[2] /= Sum;
+						for(u32 JointIndex = 0; JointIndex < JointInfo->Count; ++JointIndex)
+						{
+							JointInfo->Weights[JointIndex] = (JointInfo->Weights[JointIndex] / Sum);
+						}
 					}
 				}
 
 				for(u32 VertexIndex = 0; VertexIndex < Mesh.VertexCount; ++VertexIndex)
 				{
 					vertex *V = Mesh.Vertices + VertexIndex;
-					u32 IndexP = Indices[3 * VertexIndex];
+					u32 IndexP = Indices[AttributeCount * VertexIndex];
 					V->JointInfo = JointInfoArray[IndexP];
 				}
 			}
 		}
 
-
+#if 1
 		if((LibVisScenes.ChildrenCount != 0) && (LibControllers.ChildrenCount != 0))
 		{
 			Mesh.Joints = PushArray(Arena, Mesh.JointCount, joint);
 
-			//
-			// NOTE(Justin): The last nodes of visual scene contain the name of the
-			// node where the root joint of the joint hierarchy can be found.
-			// This is in the <skeleton> node. This approach also assumes they
-			// are in mesh order. Meaning the last skeleton is the skeleton of
-			// the last mesh. the second to last skeleton is the skeleton of
-			// the second to last mesh and so on.
-			//
+			xml_node FirstInstanceController = {};
+			NodeGet(&LibVisScenes, &FirstInstanceController, "instance_controller");
+			xml_node *ParentOfParent = FirstInstanceController.Parent->Parent;
 
-			u32 ChildIndex = (LibVisScenes.Children[0]->ChildrenCount - Model.MeshCount) + MeshIndex;
-			xml_node SkeletonParentNode = *LibVisScenes.Children[0]->Children[ChildIndex];
+			u32 InstanceControllersVisited = 0;
+			xml_node SkeletonParentNode = {};
+			for(s32 k = 0; k < ParentOfParent->ChildrenCount; ++k)
+			{
+				xml_node *Node = ParentOfParent->Children[k];
+				if(Node->ChildrenCount != 0)
+				{
+
+					for(s32 ChildIndex = 0; ChildIndex < Node->ChildrenCount; ++ChildIndex)
+					{
+						xml_node *Child = Node->Children[ChildIndex];
+						if(StringsAreSame(Child->Tag, "instance_controller"))
+						{
+							if(InstanceControllersVisited == MeshIndex)
+							{
+								SkeletonParentNode = *Node;
+								break;
+							}
+							else
+							{
+								InstanceControllersVisited++;
+							}
+						}
+					}
+				}
+
+				if(SkeletonParentNode.Tag.Size != 0)
+				{
+					break;
+				}
+			}
 
 			xml_node Skeleton = {};
 			NodeGet(&SkeletonParentNode, &Skeleton, "skeleton");
@@ -1008,21 +561,94 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 			JointRootName.Data++;
 			JointRootName.Size--;
 
-			xml_node JointRoot = {};
-			NodeGet(&LibVisScenes, &JointRoot, "node", (char *)JointRootName.Data);
-			if(JointRoot.ChildrenCount != 0)
+			xml_node SkeletonRoot = {};
+			NodeGet(&LibVisScenes, &SkeletonRoot, "node", CString(JointRootName));
+
+			if(SkeletonRoot.ChildrenCount != 0)
 			{
 				joint *Joints = Mesh.Joints;
-				Joints->Name = JointNames[0];
+				Joints->Name = Mesh.JointNames[0];
 				Joints->ParentIndex = -1;
-				ParseF32Array(Arena, &Joints->Transform.E[0][0], 16, JointRoot.Children[0]->InnerText);
+
+				// TODO(Justin): Remove overload
+				ParseF32Array(Arena, &Joints->Transform.E[0][0], 16, SkeletonRoot.Children[0]->InnerText);
 
 				u32 JointIndex = 1;
-				JointsGet(Arena, &JointRoot, JointNames, Mesh.JointCount, Joints, &JointIndex);
+				JointsGet(Arena, &SkeletonRoot, Mesh.JointNames, Mesh.JointCount, Joints, &JointIndex);
+			}
+
+			//
+			// NOTE(Justin): Unfortunately it looks as if the material info for the mesh starts here in
+			// the instance_material node.
+			//
+
+			xml_node InstanceMaterialNode = {};
+			NodeGet(&SkeletonParentNode, &InstanceMaterialNode, "instance_material");
+			string InstanceMaterialNodeName = NodeAttributeValueGet(&InstanceMaterialNode, "target");
+			Assert(InstanceMaterialNodeName.Size != 0);
+			InstanceMaterialNodeName.Data++;
+			InstanceMaterialNodeName.Size--;
+
+			xml_node MaterialNode = {};
+			NodeGet(&LibMaterials, &MaterialNode, "material", CString(InstanceMaterialNodeName));
+			xml_node *InstanceEffectNode = MaterialNode.Children[0];
+			string InstanceEffectURL = NodeAttributeValueGet(InstanceEffectNode, "url");
+			Assert(InstanceEffectURL.Size != 0);
+			InstanceEffectURL.Data++;
+			InstanceEffectURL.Size--;
+
+			xml_node EffectNode = {};
+			NodeGet(&LibEffects, &EffectNode, "effect", CString(InstanceEffectURL));
+
+			if((LibImages.ChildrenCount == 0) &&
+			   (LibMaterials.ChildrenCount != 0))
+			{
+				xml_node Phong = {};
+				NodeGet(&EffectNode, &Phong, "phong");
+				for(s32 k = 0; k < Phong.ChildrenCount; ++k)
+				{
+					xml_node *Child = Phong.Children[k];
+					if(StringsAreSame(Child->Tag, "ambient"))
+					{
+						xml_node Color = *Child->Children[0];
+						ParseF32Array(&Mesh.MaterialSpec.Ambient.E[0], 4, Color.InnerText);
+					}
+
+					if(StringsAreSame(Child->Tag, "diffuse"))
+					{
+						xml_node Color = *Child->Children[0];
+						ParseF32Array(&Mesh.MaterialSpec.Diffuse.E[0], 4, Color.InnerText);
+					}
+
+					if(StringsAreSame(Child->Tag, "specular"))
+					{
+						xml_node Color = *Child->Children[0];
+						ParseF32Array(&Mesh.MaterialSpec.Specular.E[0], 4, Color.InnerText);
+					}
+
+					if(StringsAreSame(Child->Tag, "shininess"))
+					{
+						xml_node Color = *Child->Children[0];
+						Mesh.MaterialSpec.Shininess = F32FromASCII(Color.InnerText);
+					}
+				}
+			}
+
+			if((LibImages.ChildrenCount != 0) &&
+			   (LibMaterials.ChildrenCount != 0))
+			{
+				xml_node Node = EffectNode;
+				GetTextures(Arena, &LibImages, &EffectNode, &Model, &Mesh);
 			}
 		}
+#endif
 
 		Model.Meshes[MeshIndex] = Mesh;
+	}
+
+	if((LibVisScenes.ChildrenCount != 0) && (LibControllers.ChildrenCount != 0))
+	{
+		Model.HasSkeleton = true;
 	}
 
 	//
@@ -1041,10 +667,18 @@ ModelInitFromCollada(memory_arena *Arena, loaded_dae DaeFile)
 		}
 	}
 
-	if(LibControllers.ChildrenCount != 0)
+	for(u32 MeshIndex = 0; MeshIndex < Model.MeshCount; ++MeshIndex)
 	{
-		Model.HasSkeleton = true;
+		mesh *Mesh = Model.Meshes + MeshIndex;
+		for(u32 VertexIndex = 0; VertexIndex < Mesh->VertexCount; ++VertexIndex)
+		{
+			vertex *Vertex = Mesh->Vertices + VertexIndex;
+			Assert(Vertex->JointInfo.Count <= 4);
+		}
 	}
+
+
+
 
 	return(Model);
 }

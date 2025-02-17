@@ -41,7 +41,7 @@ void main()
 {
 	vec4 Pos = vec4(0.0);
 	vec4 Norm = vec4(0.0);
-	for(uint i = 0; i < 3; ++i)
+	for(uint i = 0; i < 6; ++i)
 	{
 		if(i < JointCount)
 		{

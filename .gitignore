@@ -1,5 +1,8 @@
 build
 src/tags
+deprecated
+dependencies/GLEW/
+dependencies/GLFW64/
 
 
 
