@@ -472,25 +472,15 @@ int main(int Argc, char **Argv)
 	// NOTE(Justin): Models
 	//
 
-	GameState->Brute = ModelLoadFromCollada(Arena, "models\\Brute\\Brute.dae");
-	model *Brute = &GameState->Brute;
-	Brute->Animations.Count = ArrayCount(BruteAnimations);
-	Brute->Animations.Info = PushArray(Arena, Brute->Animations.Count, animation_info);
-	animation_info *BruteAnimation = Brute->Animations.Info;
-	*BruteAnimation  = AnimationLoad(Arena, BruteAnimations[0]);
+	GameState->Sphere = ModelLoad(Arena, "models\\Sphere.mesh");
 
 	GameState->Cube = ModelLoad(Arena, "models\\Cube\\Cube.mesh");
 	GameState->Cube.Textures[0] = TextureLoad(Arena, "textures\\orange_texture_02.png");
 	GameState->Cube.Meshes[0].DiffuseTexture = 0;
 	GameState->Cube.Meshes[0].MaterialFlags = MaterialFlag_Diffuse;
 
-	GameState->Sphere = ModelLoad(Arena, "models\\Sphere.mesh");
-	model *Sphere = &GameState->Sphere;
-
 	GameState->XBot = ModelLoad(Arena, "models\\XBot\\XBot.mesh");
-	//GameState->XBot = ModelLoadFromCollada(Arena, "models\\XBot.dae");
 	model *XBot = &GameState->XBot;
-
 	XBot->Animations.Count = ArrayCount(XBotAnimations);
 	XBot->Animations.Info = PushArray(Arena, XBot->Animations.Count, animation_info);
 	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(XBotAnimations); ++AnimIndex)
@@ -506,17 +496,9 @@ int main(int Argc, char **Argv)
 
 	GameState->Paladin = ModelLoadFromCollada(Arena, "models\\Paladin\\PaladinWithProp.dae");
 	model *Paladin = &GameState->Paladin;
-	Paladin->Animations.Count = ArrayCount(PaladinAnimations);
-	Paladin->Animations.Info = PushArray(Arena, Paladin->Animations.Count, animation_info);
-	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(PaladinAnimations); ++AnimIndex)
-	{
-		char *FileName = PaladinAnimations[AnimIndex];
-		animation_info TestAnimation = AnimationLoad(Arena, FileName);
-		animation_info *Info = Paladin->Animations.Info + AnimIndex;
-		*Info = TestAnimation;
-	}
 #else
 	// Custom Initialization
+
 	GameState->Paladin = ModelLoad(Arena, "models\\Paladin\\PaladinWithProp.mesh");
 	model *Paladin = &GameState->Paladin;
 
@@ -532,7 +514,7 @@ int main(int Argc, char **Argv)
 		Mesh->NormalTexture = 2;
 		Mesh->MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular | MaterialFlag_Normal);
 	}
-
+#endif
 	Paladin->Animations.Count = ArrayCount(PaladinAnimations);
 	Paladin->Animations.Info = PushArray(Arena, Paladin->Animations.Count, animation_info);
 	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(PaladinAnimations); ++AnimIndex)
@@ -542,20 +524,11 @@ int main(int Argc, char **Argv)
 		animation_info *Info = Paladin->Animations.Info + AnimIndex;
 		*Info = TestAnimation;
 	}
-#endif
+
 
 #if 0
 	GameState->Maria = ModelLoadFromCollada(Arena, "models\\Maria\\MariaSword.dae");
 	model *Maria = &GameState->Maria;
-	Maria->Animations.Count = ArrayCount(MariaAnimations);
-	Maria->Animations.Info = PushArray(Arena, Maria->Animations.Count, animation_info);
-	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(MariaAnimations); ++AnimIndex)
-	{
-		char *FileName = MariaAnimations[AnimIndex];
-		animation_info TestAnimation = AnimationLoad(Arena, FileName);
-		animation_info *Info = Maria->Animations.Info + AnimIndex;
-		*Info = TestAnimation;
-	}
 #else
 	GameState->Maria = ModelLoad(Arena, "models\\Maria\\MariaSword.mesh");
 	model *Maria = &GameState->Maria;
@@ -572,7 +545,7 @@ int main(int Argc, char **Argv)
 		Mesh->NormalTexture = 2;
 		Mesh->MaterialFlags = (MaterialFlag_Diffuse | MaterialFlag_Specular | MaterialFlag_Normal);
 	}
-
+#endif
 	Maria->Animations.Count = ArrayCount(MariaAnimations);
 	Maria->Animations.Info = PushArray(Arena, Maria->Animations.Count, animation_info);
 	for(u32 AnimIndex = 0; AnimIndex < ArrayCount(MariaAnimations); ++AnimIndex)
@@ -583,10 +556,6 @@ int main(int Argc, char **Argv)
 		*Info = TestAnimation;
 	}
 
-#endif
-
-
-#if 1
 	GameState->ErikaArcher = ModelLoadFromCollada(Arena, "models\\ErikaArcher\\Erika_ArcherWithBowArrow.dae");
 	model *ErikaArcher = &GameState->ErikaArcher;
 	ErikaArcher->Animations.Count = ArrayCount(ArcherAnimations);
@@ -599,8 +568,13 @@ int main(int Argc, char **Argv)
 		animation_info *Info = GameState->ErikaArcher.Animations.Info + AnimIndex;
 		*Info = TestAnimation;
 	}
-#else
-#endif
+
+	GameState->Brute = ModelLoadFromCollada(Arena, "models\\Brute\\Brute.dae");
+	model *Brute = &GameState->Brute;
+	Brute->Animations.Count = ArrayCount(BruteAnimations);
+	Brute->Animations.Info = PushArray(Arena, Brute->Animations.Count, animation_info);
+	animation_info *BruteAnimation = Brute->Animations.Info;
+	*BruteAnimation  = AnimationLoad(Arena, BruteAnimations[0]);
 
 	//
 	// GPU allocations
@@ -615,14 +589,8 @@ int main(int Argc, char **Argv)
 	OpenGLAllocateAnimatedModel(&GameState->Vampire, Shaders[0].Handle);
 	AllocateModelTextures(&GameState->Vampire);
 
-	//OpenGLAllocateAnimatedModel(Ninja, Shaders[0].Handle);
-	//AllocateModelTextures(Ninja);
-
 	OpenGLAllocateAnimatedModel(&GameState->Maria, Shaders[0].Handle);
 	AllocateModelTextures(&GameState->Maria);
-
-	//OpenGLAllocateAnimatedModel(Mannequin, Shaders[0].Handle);
-	//AllocateModelTextures(Mannequin);
 
 	OpenGLAllocateAnimatedModel(&GameState->Brute, Shaders[0].Handle);
 	AllocateModelTextures(&GameState->Brute);
@@ -635,20 +603,13 @@ int main(int Argc, char **Argv)
 	OpenGLAllocateModel(&GameState->Cube, Shaders[1].Handle);
 	AllocateModelTextures(&GameState->Cube);
 
-	quad Quad = QuadDefault();
-	Quad.DiffuseTexture = GameState->Textures[2].Handle;
-	Quad.NormalTexture = GameState->Textures[3].Handle;
-	OpenGLAllocateQuad(&Quad, Shaders[2].Handle);
-
 	PlayerAdd(GameState);
 	VampireAdd(GameState);
 	LightAdd(GameState);
 	PaladinAdd(GameState);
-	//NinjaAdd(GameState);
 	MariaAdd(GameState);
 	BruteAdd(GameState);
-	//ErikaArcherAdd(GameState);
-	BlockAdd(GameState);
+	ErikaArcherAdd(GameState);
 
 	f32 StartTime = 0.0f;
 	f32 EndTime = 0.0f;
@@ -756,17 +717,6 @@ int main(int Argc, char **Argv)
 					AnimationUpdate(XBot, DtForFrame);
 					OpenGLDrawAnimatedModel(XBot, Shaders[0].Handle, Transform);
 				} break;
-				case EntityType_Vampire:
-				{
-					glUseProgram(Shaders[0].Handle);
-					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
-					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
-					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
-					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
-					mat4 Transform = EntityTransform(Entity, 0.1f);
-					AnimationUpdate(&GameState->Vampire, DtForFrame);
-					OpenGLDrawAnimatedModel(&GameState->Vampire, Shaders[0].Handle, Transform);
-				} break;
 				case EntityType_Paladin:
 				{
 					glUseProgram(Shaders[0].Handle);
@@ -778,17 +728,6 @@ int main(int Argc, char **Argv)
 					AnimationUpdate(Paladin, DtForFrame);
 					OpenGLDrawAnimatedModel(Paladin, Shaders[0].Handle, Transform);
 				} break;
-				case EntityType_Ninja:
-				{
-					glUseProgram(Shaders[0].Handle);
-					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
-					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
-					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
-					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
-					mat4 Transform = EntityTransform(Entity, 0.1f);
-					//AnimationUpdate(Ninja, DtForFrame);
-					//OpenGLDrawAnimatedModel(&GameState->Ninja, Shaders[0].Handle, Transform);
-				} break;
 				case EntityType_Maria:
 				{
 					glUseProgram(Shaders[0].Handle);
@@ -797,7 +736,6 @@ int main(int Argc, char **Argv)
 					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
 					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
 					mat4 Transform = EntityTransform(Entity, 0.1f);
-
 					AnimationUpdate(Maria, DtForFrame);
 					OpenGLDrawAnimatedModel(Maria, Shaders[0].Handle, Transform);
 				} break;
@@ -809,8 +747,6 @@ int main(int Argc, char **Argv)
 					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
 					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
 					mat4 Transform = EntityTransform(Entity, 0.1f);
-					//ModelJointsUpdate(Brute, DtForFrame);
-					//ModelUpdate(Brute);
 					AnimationUpdate(&GameState->Brute, DtForFrame);
 					OpenGLDrawAnimatedModel(&GameState->Brute, Shaders[0].Handle, Transform);
 				} break;
@@ -835,23 +771,12 @@ int main(int Argc, char **Argv)
 					AnimationUpdate(&GameState->ErikaArcher, DtForFrame);
 					OpenGLDrawAnimatedModel(&GameState->ErikaArcher, Shaders[0].Handle, Transform);
 				} break;
-				case EntityType_BulkyKnight:
-				{
-					glUseProgram(Shaders[0].Handle);
-					UniformV3Set(Shaders[0].Handle, "Ambient", Ambient);
-					UniformV3Set(Shaders[0].Handle, "LightPosition", LightP);
-					UniformV3Set(Shaders[0].Handle, "CameraPosition", CameraP);
-					UniformV3Set(Shaders[0].Handle, "LightColor", LightColor);
-					mat4 Transform = EntityTransform(Entity, 0.1f);
-					//AnimationUpdate(&GameState->Orc, DtForFrame);
-					OpenGLDrawAnimatedModel(&GameState->BulkyKnight, Shaders[0].Handle, Transform);
-				} break;
 				case EntityType_Light:
 				{
 					glUseProgram(Shaders[1].Handle);
 					UniformV3Set(Shaders[1].Handle, "Diffuse", V3(1.0f));
 					mat4 Transform = EntityTransform(Entity);
-					OpenGLDrawModel(Sphere, Shaders[1].Handle, Transform);
+					OpenGLDrawModel(&GameState->Sphere, Shaders[1].Handle, Transform);
 				} break;
 				case EntityType_Block:
 				{
